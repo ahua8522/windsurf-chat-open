@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { ChatPanelProvider } from './chatPanel';
 
 let httpServer: http.Server | null = null;
@@ -11,6 +12,9 @@ let panelProvider: ChatPanelProvider | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('[WindsurfChatOpen] 插件激活中...');
+
+  // 清理超过 24 小时的旧临时文件
+  cleanOldTempFiles();
 
   panelProvider = new ChatPanelProvider(context.extensionUri);
 
@@ -202,6 +206,39 @@ function updateGitignore(workspacePath: string) {
     }
   } catch (e) {
     console.error(`[WindsurfChatOpen] 更新 .gitignore 失败: ${e}`);
+  }
+}
+
+function cleanOldTempFiles() {
+  const tempDir = os.tmpdir();
+  const maxAge = 24 * 60 * 60 * 1000; // 24 小时
+  const now = Date.now();
+  const prefixes = ['wsc_img_', 'windsurf_chat_open_'];
+
+  try {
+    const files = fs.readdirSync(tempDir);
+    let cleaned = 0;
+
+    for (const file of files) {
+      if (!prefixes.some(p => file.startsWith(p))) continue;
+
+      const filePath = path.join(tempDir, file);
+      try {
+        const stat = fs.statSync(filePath);
+        if (now - stat.mtimeMs > maxAge) {
+          fs.unlinkSync(filePath);
+          cleaned++;
+        }
+      } catch {
+        // 忽略单个文件错误
+      }
+    }
+
+    if (cleaned > 0) {
+      console.log(`[WindsurfChatOpen] 已清理 ${cleaned} 个旧临时文件`);
+    }
+  } catch (e) {
+    console.error(`[WindsurfChatOpen] 清理临时文件失败: ${e}`);
   }
 }
 
