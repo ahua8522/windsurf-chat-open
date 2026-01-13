@@ -294,10 +294,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     <div class="image-preview" id="imagePreview"></div>
     <div class="buttons">
       <button class="btn-primary" id="btnSubmit">提交 (Ctrl+Enter)</button>
-      <button class="btn-secondary" id="btnContinue">继续</button>
-      <button class="btn-danger" id="btnEnd">结束</button>
+      <button class="btn-danger" id="btnEnd">结束对话</button>
     </div>
-    <div class="hint">Ctrl+Enter 提交 | Esc 结束对话</div>
+    <div class="hint">空提交=继续 | Ctrl+Enter 提交 | Esc 结束</div>
   </div>
   
   <div class="modal" id="imageModal">
@@ -316,7 +315,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let images = [];
 
     document.getElementById('btnSubmit').onclick = submit;
-    document.getElementById('btnContinue').onclick = () => vscode.postMessage({ type: 'continue' });
     document.getElementById('btnEnd').onclick = () => vscode.postMessage({ type: 'end' });
     document.getElementById('modalClose').onclick = closeModal;
     imageModal.onclick = (e) => { if (e.target === imageModal) closeModal(); };
