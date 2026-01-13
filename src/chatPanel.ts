@@ -149,8 +149,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     .waiting-indicator {
       display: none;
-      background: var(--vscode-inputValidation-warningBackground, #5a4a00);
-      border: 1px solid var(--vscode-inputValidation-warningBorder, #ff0);
+      background: var(--vscode-inputValidation-infoBackground);
+      border: 1px solid var(--vscode-inputValidation-infoBorder);
       border-radius: 4px;
       padding: 8px 12px;
       margin-bottom: 12px;
@@ -162,7 +162,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     .waiting-indicator-text {
       font-size: 13px;
       font-weight: 600;
-      color: var(--vscode-inputValidation-warningForeground, #fff);
+      color: var(--vscode-inputValidation-infoForeground);
     }
     @keyframes pulse {
       0%, 100% { opacity: 1; }
@@ -177,7 +177,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       width: 100%;
       min-height: 60px;
       padding: 8px;
-      border: 1px solid var(--vscode-input-border);
+      border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35));
       background: var(--vscode-input-background);
       color: var(--vscode-input-foreground);
       border-radius: 4px;

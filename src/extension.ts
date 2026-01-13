@@ -165,9 +165,19 @@ function setupWorkspace(context: vscode.ExtensionContext) {
 
     // 生成 .windsurfrules（使用项目内脚本路径）
     const rulesDest = path.join(workspacePath, '.windsurfrules');
+    const rulesContent = generateRulesContent(scriptDest);
+    const ruleMarker = '<!-- WINDSURF_CHAT_OPEN_V1 -->';
+    
     if (!fs.existsSync(rulesDest)) {
-      const rulesContent = generateRulesContent(scriptDest);
+      // 文件不存在，直接创建
       fs.writeFileSync(rulesDest, rulesContent);
+    } else {
+      // 文件存在，检查是否包含我们的规则
+      const existingContent = fs.readFileSync(rulesDest, 'utf-8');
+      if (!existingContent.includes(ruleMarker)) {
+        // 不包含我们的规则，追加到文件末尾
+        fs.appendFileSync(rulesDest, '\n\n' + rulesContent);
+      }
     }
 
     // 自动添加 .windsurfchatopen/ 到 .gitignore
