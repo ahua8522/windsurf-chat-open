@@ -126,8 +126,11 @@ function handleRequest(data: { prompt: string; requestId: string }, res: http.Se
   // 5 分钟后自动发送"继续等待"消息
   setTimeout(() => {
     if (pendingCallback && panelProvider) {
+      // 从配置读取超时消息
+      const config = vscode.workspace.getConfiguration('windsurfChatOpen');
+      const timeoutMessage = config.get<string>('timeoutMessage') || '用户还在思考中，请继续等待...';
       // 模拟用户发送消息
-      panelProvider.autoSubmit('用户还在思考中，请继续等待...');
+      panelProvider.autoSubmit(timeoutMessage);
     }
   }, 5 * 60 * 1000);
 }
