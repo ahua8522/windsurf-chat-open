@@ -170,6 +170,18 @@ function setupWorkspace(context: vscode.ExtensionContext) {
       fs.writeFileSync(rulesDest, rulesContent);
     }
 
+    // 自动添加 .windsurfchatopen/ 到 .gitignore
+    const gitignorePath = path.join(workspacePath, '.gitignore');
+    const ignoreEntry = LOCAL_DIR_NAME + '/';
+    if (fs.existsSync(gitignorePath)) {
+      const content = fs.readFileSync(gitignorePath, 'utf-8');
+      if (!content.includes(ignoreEntry)) {
+        fs.appendFileSync(gitignorePath, '\n# WindsurfChatOpen\n' + ignoreEntry + '\n');
+      }
+    } else {
+      fs.writeFileSync(gitignorePath, '# WindsurfChatOpen\n' + ignoreEntry + '\n');
+    }
+
     console.log(`[WindsurfChatOpen] 工作区已设置: ${localDir}`);
   }
 
