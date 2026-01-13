@@ -123,16 +123,13 @@ function handleRequest(data: { prompt: string; requestId: string }, res: http.Se
     res.end(JSON.stringify(response));
   };
 
-  // 5 分钟后自动发送"继续等待"消息
+  // 30 分钟后自动返回 continue
   setTimeout(() => {
-    if (pendingCallback && panelProvider) {
-      // 从配置读取超时消息
-      const config = vscode.workspace.getConfiguration('windsurfChatOpen');
-      const timeoutMessage = config.get<string>('timeoutMessage') || '用户还在思考中，请继续等待...';
-      // 模拟用户发送消息
-      panelProvider.autoSubmit(timeoutMessage);
+    if (pendingCallback) {
+      pendingCallback({ action: 'continue', text: '', images: [] });
+      pendingCallback = null;
     }
-  }, 5 * 60 * 1000);
+  }, 30 * 60 * 1000);
 }
 
 function setupGlobalFiles(context: vscode.ExtensionContext) {

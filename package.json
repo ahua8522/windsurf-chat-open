@@ -49,17 +49,7 @@
         "key": "ctrl+shift+w",
         "mac": "cmd+shift+w"
       }
-    ],
-    "configuration": {
-      "title": "WindsurfChatOpen",
-      "properties": {
-        "windsurfChatOpen.timeoutMessage": {
-          "type": "string",
-          "default": "用户还在思考中，请继续等待...",
-          "description": "超时后自动发送给 AI 的消息"
-        }
-      }
-    }
+    ]
   },
   "scripts": {
     "compile": "tsc -p ./",
