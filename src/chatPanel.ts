@@ -103,45 +103,43 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       flex-direction: column;
     }
     .header {
+      margin-bottom: 16px;
+    }
+    .header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .header-meta {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--vscode-widget-border);
-    }
-    .header h1 {
-      font-size: 14px;
-      font-weight: 600;
-    }
-    .version {
       font-size: 11px;
       color: var(--vscode-descriptionForeground);
+    }
+    .version {
       background: var(--vscode-badge-background);
       padding: 2px 6px;
-      border-radius: 4px;
+      border-radius: 3px;
+    }
+    .slogan {
+      opacity: 0.8;
     }
     .prompt-area {
       max-height: 120px;
       overflow-y: auto;
       margin-bottom: 12px;
-      padding: 10px 12px;
-      background: var(--vscode-editor-inactiveSelectionBackground);
-      border-left: 3px solid var(--vscode-focusBorder);
-      border-radius: 0 6px 6px 0;
+      padding: 6px 0;
       font-size: 13px;
       line-height: 1.6;
       white-space: pre-wrap;
       word-break: break-word;
-      color: var(--vscode-editor-foreground);
+      color: var(--vscode-descriptionForeground);
     }
     .prompt-area::before {
-      content: '🤖 AI';
-      display: block;
-      font-size: 11px;
-      color: var(--vscode-textLink-foreground);
-      margin-bottom: 4px;
-      font-weight: 600;
+      content: '🤖 ';
+      color: var(--vscode-descriptionForeground);
+      font-size: 13px;
     }
     .prompt-area:empty {
       display: none;
@@ -171,28 +169,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       gap: 8px;
     }
     button {
-      flex: 1;
-      padding: 8px 12px;
-      border: none;
-      border-radius: 4px;
+      padding: 6px 12px;
+      border: 1px solid var(--vscode-widget-border);
+      background: transparent;
+      color: var(--vscode-foreground);
+      border-radius: 3px;
       cursor: pointer;
-      font-size: 13px;
-      font-weight: 500;
+      font-size: 12px;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    button:hover {
+      opacity: 1;
+      background: var(--vscode-list-hoverBackground);
     }
     .btn-primary {
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
-    }
-    .btn-primary:hover {
-      background: var(--vscode-button-hoverBackground);
-    }
-    .btn-secondary {
-      background: var(--vscode-button-secondaryBackground);
-      color: var(--vscode-button-secondaryForeground);
+      border-color: var(--vscode-focusBorder);
     }
     .btn-danger {
-      background: #d32f2f;
-      color: white;
+      color: var(--vscode-errorForeground);
     }
     .image-preview {
       display: flex;
@@ -280,7 +275,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 <body>
   <div class="header">
     <h1>WindsurfChat Open</h1>
-    <span class="version">v1.0.0</span>
+    <div class="header-meta">
+      <span class="version">v1.0.0</span>
+      <span class="slogan">🎉 免费开源 · 安全可控 · 无需配置</span>
+    </div>
   </div>
   
   <div class="prompt-area" id="promptArea">等待 AI 输出...</div>
