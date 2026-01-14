@@ -31,7 +31,7 @@ class ExtensionStateManager {
     );
 
     this.panelProvider.onUserResponse((response) => {
-      this.httpService.sendResponse(response);
+      this.httpService.sendResponse(response, response.requestId);
     });
 
     // Register commands
@@ -78,8 +78,9 @@ class ExtensionStateManager {
 
   private async handleRequest(data: RequestData) {
     console.log(`[WindsurfChatOpen] Received request: ${data.requestId}`);
-    await this.panelProvider.showPrompt(data.prompt);
+    await this.panelProvider.showPrompt(data.prompt, data.requestId);
   }
+
 
   private cleanOldTempFiles() {
     const tempDir = os.tmpdir();

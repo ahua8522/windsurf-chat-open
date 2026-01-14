@@ -10,6 +10,7 @@ export interface UserResponse {
   action: 'continue' | 'end' | 'instruction';
   text: string;
   images: string[];
+  requestId?: string;
 }
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
@@ -19,6 +20,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _port: number = 0;
   private _viewReadyResolve?: () => void;
   private _viewReadyPromise?: Promise<void>;
+  private _currentRequestId?: string;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -57,23 +59,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private _handleWebviewMessage(message: any) {
+    const requestId = message.requestId || this._currentRequestId;
     switch (message.type) {
       case 'ready':
         this._viewReadyResolve?.();
         break;
       case 'continue':
-        this._onUserResponse.fire({ action: 'continue', text: '', images: [] });
+        this._onUserResponse.fire({ action: 'continue', text: '', images: [], requestId });
         break;
       case 'end':
-        this._onUserResponse.fire({ action: 'end', text: '', images: [] });
+        this._onUserResponse.fire({ action: 'end', text: '', images: [], requestId });
         break;
       case 'submit':
-        this._handleSubmit(message.text, message.images || []);
+        this._handleSubmit(message.text, message.images || [], requestId);
         break;
     }
   }
 
-  async showPrompt(prompt: string) {
+  async showPrompt(prompt: string, requestId?: string) {
+    this._currentRequestId = requestId;
     if (!this._view) {
       await vscode.commands.executeCommand(COMMANDS.PANEL_FOCUS);
     }
@@ -91,16 +95,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
     if (this._view) {
       this._view.show?.(false);
-      this._view.webview.postMessage({ type: 'showPrompt', prompt, startTimer: true });
+      this._view.webview.postMessage({ type: 'showPrompt', prompt, requestId, startTimer: true });
     }
   }
+
 
   setPort(port: number) {
     this._port = port;
     this._view?.webview.postMessage({ type: 'setPort', port });
   }
 
-  private _handleSubmit(text: string, images: string[]) {
+  private _handleSubmit(text: string, images: string[], requestId?: string) {
     const tempDir = os.tmpdir();
     const timestamp = Date.now();
     const uniqueId = crypto.randomBytes(4).toString('hex');
@@ -123,15 +128,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this._onUserResponse.fire({
         action: 'instruction',
         text: `[Content too long, saved to file]\n\nUser provided full instruction, please use read_file tool to read the following file:\n- ${txtPath}`,
-        images: savedImages
+        images: savedImages,
+        requestId: requestId
       });
     } else {
       this._onUserResponse.fire({
         action: 'instruction',
         text,
-        images: savedImages
+        images: savedImages,
+        requestId: requestId
       });
     }
   }
+
 }
 

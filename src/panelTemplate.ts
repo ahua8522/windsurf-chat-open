@@ -261,11 +261,12 @@ export function getPanelHtml(version: string = '0.0.0'): string {
     const modalImage = document.getElementById('modalImage');
     const waitingIndicator = document.getElementById('waitingIndicator');
     let images = [];
+    let currentRequestId = '';
 
     document.getElementById('btnSubmit').onclick = submit;
     document.getElementById('btnEnd').onclick = () => {
       waitingIndicator.classList.remove('show');
-      vscode.postMessage({ type: 'end' });
+      vscode.postMessage({ type: 'end', requestId: currentRequestId });
     };
     document.getElementById('modalClose').onclick = closeModal;
     imageModal.onclick = (e) => { if (e.target === imageModal) closeModal(); };
@@ -283,12 +284,12 @@ export function getPanelHtml(version: string = '0.0.0'): string {
       const text = inputText.value.trim();
       const validImages = images.filter(img => img !== null);
       if (text || validImages.length > 0) {
-        vscode.postMessage({ type: 'submit', text, images: validImages });
+        vscode.postMessage({ type: 'submit', text, images: validImages, requestId: currentRequestId });
         inputText.value = '';
         images = [];
         imagePreview.innerHTML = '';
       } else {
-        vscode.postMessage({ type: 'continue' });
+        vscode.postMessage({ type: 'continue', requestId: currentRequestId });
       }
     }
 
@@ -298,7 +299,7 @@ export function getPanelHtml(version: string = '0.0.0'): string {
         submit();
       } else if (e.key === 'Escape') {
         waitingIndicator.classList.remove('show');
-        vscode.postMessage({ type: 'end' });
+        vscode.postMessage({ type: 'end', requestId: currentRequestId });
       }
     });
 
@@ -377,6 +378,7 @@ export function getPanelHtml(version: string = '0.0.0'): string {
       const msg = e.data;
       if (msg.type === 'showPrompt') {
         promptText.textContent = msg.prompt;
+        currentRequestId = msg.requestId || '';
         waitingIndicator.classList.add('show');
         inputText.focus();
         if (msg.startTimer) {

@@ -21,17 +21,7 @@ export class HttpService {
     ) { }
 
     public async start(): Promise<number> {
-        const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!workspacePath) {
-            console.log('[WindsurfChatOpen] No workspace open, skipping HTTP server start');
-            return 0;
-        }
-
-        const localDir = path.join(workspacePath, LOCAL_DIR_NAME);
-        const portFile = path.join(localDir, 'port');
-
-        this.cleanupPortFile(portFile);
-
+        this.cleanupAllPortFiles();
         this.server = http.createServer((req, res) => this.handleIncomingRequest(req, res));
 
         return new Promise((resolve, reject) => {
@@ -39,12 +29,18 @@ export class HttpService {
         });
     }
 
-    private cleanupPortFile(portFile: string) {
-        if (fs.existsSync(portFile)) {
-            try {
-                fs.unlinkSync(portFile);
-            } catch (e) {
-                console.error(`[WindsurfChatOpen] Failed to delete old port file: ${e}`);
+    private cleanupAllPortFiles() {
+        const folders = vscode.workspace.workspaceFolders;
+        if (!folders) return;
+
+        for (const folder of folders) {
+            const portFile = path.join(folder.uri.fsPath, LOCAL_DIR_NAME, 'port');
+            if (fs.existsSync(portFile)) {
+                try {
+                    fs.unlinkSync(portFile);
+                } catch (e) {
+                    console.error(`[WindsurfChatOpen] Failed to delete port file in ${folder.name}: ${e}`);
+                }
             }
         }
     }
@@ -55,36 +51,42 @@ export class HttpService {
             return;
         }
 
-        this.server!.once('error', (err: any) => {
+        const onListenError = (err: any) => {
             if (err.code === 'EADDRINUSE') {
                 const nextPort = BASE_PORT + Math.floor(Math.random() * MAX_PORT_ATTEMPTS);
                 this.tryListen(nextPort, attempt + 1, resolve, reject);
             } else {
                 reject(err);
             }
-        });
+        };
+
+        this.server!.once('error', onListenError);
 
         this.server!.listen(port, '127.0.0.1', () => {
+            this.server!.removeListener('error', onListenError);
             this.port = port;
-            this.writePortFile(port);
+            this.writePortFiles(port);
             resolve(port);
         });
     }
 
-    private writePortFile(port: number) {
-        const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!workspacePath) return;
+    private writePortFiles(port: number) {
+        const folders = vscode.workspace.workspaceFolders;
+        if (!folders) return;
 
-        const localDir = path.join(workspacePath, LOCAL_DIR_NAME);
-        const portFile = path.join(localDir, 'port');
+        for (const folder of folders) {
+            const workspacePath = folder.uri.fsPath;
+            const localDir = path.join(workspacePath, LOCAL_DIR_NAME);
+            const portFile = path.join(localDir, 'port');
 
-        try {
-            if (!fs.existsSync(localDir)) {
-                fs.mkdirSync(localDir, { recursive: true });
+            try {
+                if (!fs.existsSync(localDir)) {
+                    fs.mkdirSync(localDir, { recursive: true });
+                }
+                fs.writeFileSync(portFile, port.toString(), 'utf-8');
+            } catch (e) {
+                console.error(`[WindsurfChatOpen] Failed to write port file in ${folder.name}: ${e}`);
             }
-            fs.writeFileSync(portFile, port.toString(), 'utf-8');
-        } catch (e) {
-            console.error(`[WindsurfChatOpen] Failed to write port file: ${e}`);
         }
     }
 
@@ -145,20 +147,21 @@ export class HttpService {
         }
     }
 
-    public sendResponse(response: any) {
-        const requestId = this.activeRequestId;
-        if (requestId && this.pendingRequests.has(requestId)) {
-            const pending = this.pendingRequests.get(requestId)!;
+    public sendResponse(response: any, requestId?: string) {
+        const id = requestId || this.activeRequestId;
+        if (id && this.pendingRequests.has(id)) {
+            const pending = this.pendingRequests.get(id)!;
             pending.res.writeHead(200, { 'Content-Type': 'application/json' });
             pending.res.end(JSON.stringify(response));
-            this.clearPendingRequest(requestId);
-            if (this.activeRequestId === requestId) {
+            this.clearPendingRequest(id);
+            if (this.activeRequestId === id) {
                 this.activeRequestId = null;
             }
         }
     }
 
     public dispose() {
+        this.cleanupAllPortFiles();
         for (const requestId of Array.from(this.pendingRequests.keys())) {
             this.clearPendingRequest(requestId);
         }
