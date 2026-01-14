@@ -1,23 +1,9 @@
 /**
- * 从 package.json 读取版本号
- */
-function getVersion(): string {
-    try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const pkg = require('../package.json');
-        return pkg.version || '0.0.0';
-    } catch {
-        return '0.0.0';
-    }
-}
-
-/**
  * 获取 webview 的 HTML 内容
  */
-export function getPanelHtml(): string {
-    const version = getVersion();
+export function getPanelHtml(version: string = '0.0.0'): string {
 
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">

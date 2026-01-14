@@ -3,15 +3,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import { WEBVIEW_READY_TIMEOUT_MS, LONG_TEXT_THRESHOLD, COMMANDS } from './constants';
+import { getPanelHtml } from './panelTemplate';
 
 export interface UserResponse {
   action: 'continue' | 'end' | 'instruction';
   text: string;
   images: string[];
 }
-
-const WEBVIEW_READY_TIMEOUT_MS = 5000;
-const LONG_TEXT_THRESHOLD = 500;
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
@@ -21,7 +20,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _viewReadyResolve?: () => void;
   private _viewReadyPromise?: Promise<void>;
 
-  constructor(private readonly _extensionUri: vscode.Uri) {
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    private readonly _version: string
+  ) {
     this._resetViewReadyPromise();
   }
 
@@ -39,33 +41,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       localResourceRoots: [this._extensionUri]
     };
 
-    webviewView.webview.html = this._getHtml();
+    webviewView.webview.html = getPanelHtml(this._version);
 
-    // 面板初始化后，如果已有端口信息则发送
     if (this._port > 0) {
       webviewView.webview.postMessage({ type: 'setPort', port: this._port });
     }
 
-    webviewView.webview.onDidReceiveMessage((message) => {
-      switch (message.type) {
-        case 'ready':
-          if (this._viewReadyResolve) {
-            this._viewReadyResolve();
-          }
-          break;
-        case 'continue':
-          this._onUserResponse.fire({ action: 'continue', text: '', images: [] });
-          break;
-        case 'end':
-          this._onUserResponse.fire({ action: 'end', text: '', images: [] });
-          break;
-        case 'submit':
-          this._handleSubmit(message.text, message.images || []);
-          break;
-      }
-    });
+    webviewView.webview.onDidReceiveMessage((message) => this._handleWebviewMessage(message));
 
-    // 面板被隐藏时重置 ready promise
     webviewView.onDidChangeVisibility(() => {
       if (!webviewView.visible) {
         this._resetViewReadyPromise();
@@ -73,22 +56,37 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  private _handleWebviewMessage(message: any) {
+    switch (message.type) {
+      case 'ready':
+        this._viewReadyResolve?.();
+        break;
+      case 'continue':
+        this._onUserResponse.fire({ action: 'continue', text: '', images: [] });
+        break;
+      case 'end':
+        this._onUserResponse.fire({ action: 'end', text: '', images: [] });
+        break;
+      case 'submit':
+        this._handleSubmit(message.text, message.images || []);
+        break;
+    }
+  }
+
   async showPrompt(prompt: string) {
-    // 如果面板未初始化，先打开面板
     if (!this._view) {
-      await vscode.commands.executeCommand('windsurfChatOpen.panel.focus');
+      await vscode.commands.executeCommand(COMMANDS.PANEL_FOCUS);
     }
 
-    // 等待 webview 真正就绪（带超时保护）
     try {
       await Promise.race([
         this._viewReadyPromise,
         new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Webview 就绪超时')), WEBVIEW_READY_TIMEOUT_MS)
+          setTimeout(() => reject(new Error('Webview ready timeout')), WEBVIEW_READY_TIMEOUT_MS)
         )
       ]);
     } catch {
-      // 超时后继续尝试发送消息
+      // Continue anyway
     }
 
     if (this._view) {
@@ -99,9 +97,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   setPort(port: number) {
     this._port = port;
-    if (this._view) {
-      this._view.webview.postMessage({ type: 'setPort', port });
-    }
+    this._view?.webview.postMessage({ type: 'setPort', port });
   }
 
   private _handleSubmit(text: string, images: string[]) {
@@ -110,16 +106,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const uniqueId = crypto.randomBytes(4).toString('hex');
     const savedImages: string[] = [];
 
-    for (let i = 0; i < images.length; i++) {
+    images.forEach((img, i) => {
       try {
         const imgPath = path.join(tempDir, `wsc_img_${uniqueId}_${i}.png`);
-        const base64Data = images[i].replace(/^data:image\/\w+;base64,/, '');
+        const base64Data = img.replace(/^data:image\/\w+;base64,/, '');
         fs.writeFileSync(imgPath, base64Data, 'base64');
         savedImages.push(imgPath);
-      } catch {
-        // 忽略单个图片保存失败
+      } catch (e) {
+        console.error(`[WindsurfChatOpen] Failed to save image: ${e}`);
       }
-    }
+    });
 
     if (text.length > LONG_TEXT_THRESHOLD) {
       const txtPath = path.join(tempDir, `windsurf_chat_instruction_${timestamp}.txt`);
@@ -137,10 +133,5 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       });
     }
   }
-
-  private _getHtml(): string {
-    // 使用单独的模板模块
-    const { getPanelHtml } = require('./panelTemplate');
-    return getPanelHtml();
-  }
 }
+

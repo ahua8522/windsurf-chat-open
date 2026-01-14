@@ -5,6 +5,14 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.5.0] - 2026-01-14
+
+### 改进 (Clean Code & KISS)
+- **代码重构**：将臃肿的 `extension.ts` 拆解为 `HttpService`, `WorkspaceManager` 和 `ExtensionStateManager`。
+- **配置统一**：引入 `constants.ts` 集中管理所有魔法数字和字符串常量。
+- **模块化**：使用标准的 TypeScript 导入替代 `require`，提升类型安全。
+- **健壮性**：优化端口寻找算法和错误处理机制。
+
 ## [1.1.4] - 2026-01-14
 
 ### 修复
