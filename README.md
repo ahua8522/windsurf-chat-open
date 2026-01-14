@@ -6,9 +6,9 @@
 
 ## 安装
 
-1. 下载 `windsurf-chat-open-1.1.0.vsix`
+1. 从 [Releases](https://github.com/nicepkg/windsurf-chat-open/releases) 下载最新版 `.vsix` 文件
 2. Windsurf/VSCode: `Ctrl+Shift+P` → `Extensions: Install from VSIX...`
-3. 选择下载的 .vsix 文件安装
+3. 选择下载的 `.vsix` 文件安装
 
 ## 配置
 
