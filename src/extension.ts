@@ -53,6 +53,17 @@ export function activate(context: vscode.ExtensionContext) {
       })
     );
 
+    // 创建状态栏按钮
+    const statusBarItem = vscode.window.createStatusBarItem(
+      vscode.StatusBarAlignment.Right,
+      100
+    );
+    statusBarItem.text = '$(comment-discussion) windsurf-chat-open';
+    statusBarItem.tooltip = 'WindsurfChat Open - 点击打开面板';
+    statusBarItem.command = 'windsurfChatOpen.focus';
+    statusBarItem.show();
+    context.subscriptions.push(statusBarItem);
+
     console.log('[WindsurfChatOpen] 插件激活完成');
   } catch (error) {
     console.error('[WindsurfChatOpen] 插件激活失败:', error);
