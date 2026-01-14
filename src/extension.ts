@@ -6,7 +6,8 @@ import * as os from 'os';
 import { ChatPanelProvider } from './chatPanel';
 
 const LOCAL_DIR_NAME = '.windsurfchatopen';
-const FIXED_PORT = 34500;
+const BASE_PORT = 34500;
+const MAX_PORT_ATTEMPTS = 100;
 
 let httpServer: http.Server | null = null;
 let httpServerPort = 0;
@@ -14,86 +15,150 @@ let pendingCallback: ((response: any) => void) | null = null;
 let panelProvider: ChatPanelProvider | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('[WindsurfChatOpen] 插件激活中...');
+  try {
+    console.log('[WindsurfChatOpen] ========== 插件激活开始 ==========');
+    vscode.window.showInformationMessage('WindsurfChatOpen 插件正在激活...');
 
-  // 清理超过 24 小时的旧临时文件
-  cleanOldTempFiles();
+    // 清理超过 24 小时的旧临时文件
+    cleanOldTempFiles();
 
-  panelProvider = new ChatPanelProvider(context.extensionUri);
+    panelProvider = new ChatPanelProvider(context.extensionUri);
 
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('windsurfChatOpen.panel', panelProvider, {
-      webviewOptions: { retainContextWhenHidden: true }
-    })
-  );
+    context.subscriptions.push(
+      vscode.window.registerWebviewViewProvider('windsurfChatOpen.panel', panelProvider, {
+        webviewOptions: { retainContextWhenHidden: true }
+      })
+    );
 
-  panelProvider.onUserResponse((response) => {
-    if (pendingCallback) {
-      pendingCallback(response);
-      pendingCallback = null;
-    }
-  });
+    panelProvider.onUserResponse((response) => {
+      if (pendingCallback) {
+        pendingCallback(response);
+        pendingCallback = null;
+      }
+    });
 
-  startHttpServer(context);
+    // 延迟启动 HTTP 服务器，等待工作区初始化
+    setTimeout(() => startHttpServer(context), 100);
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('windsurfChatOpen.focus', () => {
-      vscode.commands.executeCommand('windsurfChatOpen.panel.focus');
-    })
-  );
+    context.subscriptions.push(
+      vscode.commands.registerCommand('windsurfChatOpen.focus', () => {
+        vscode.commands.executeCommand('windsurfChatOpen.panel.focus');
+      })
+    );
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('windsurfChatOpen.setup', () => {
+    context.subscriptions.push(
+      vscode.commands.registerCommand('windsurfChatOpen.setup', () => {
+        setupWorkspace(context);
+      })
+    );
+
+    if (vscode.workspace.workspaceFolders?.length) {
       setupWorkspace(context);
-    })
-  );
+    }
 
-  if (vscode.workspace.workspaceFolders?.length) {
-    setupWorkspace(context);
+    console.log('[WindsurfChatOpen] 插件激活完成');
+  } catch (error) {
+    console.error('[WindsurfChatOpen] 插件激活失败:', error);
+    vscode.window.showErrorMessage(`WindsurfChatOpen 激活失败: ${error}`);
   }
-
-  console.log('[WindsurfChatOpen] 插件激活完成');
 }
 
 function startHttpServer(context: vscode.ExtensionContext) {
+  const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspacePath) {
+    console.log('[WindsurfChatOpen] 没有打开的工作区，跳过 HTTP 服务器启动');
+    return;
+  }
+
+  const localDir = path.join(workspacePath, LOCAL_DIR_NAME);
+  const portFile = path.join(localDir, 'port');
+
+  // 删除旧的 port 文件
+  if (fs.existsSync(portFile)) {
+    try {
+      fs.unlinkSync(portFile);
+      console.log('[WindsurfChatOpen] 已删除旧的 port 文件');
+    } catch (e) {
+      console.error(`[WindsurfChatOpen] 删除 port 文件失败: ${e}`);
+    }
+  }
+
+  // 生成随机端口
+  const targetPort = BASE_PORT + Math.floor(Math.random() * MAX_PORT_ATTEMPTS);
+  console.log(`[WindsurfChatOpen] 生成随机端口: ${targetPort}`);
+
   httpServer = http.createServer((req, res) => {
+    console.log(`[WindsurfChatOpen] HTTP 请求: ${req.method} ${req.url}`);
+
     if (req.method === 'POST' && req.url === '/request') {
       let body = '';
       req.on('data', chunk => body += chunk);
       req.on('end', () => {
+        console.log(`[WindsurfChatOpen] 收到 POST 数据: ${body.substring(0, 100)}...`);
         try {
           const data = JSON.parse(body);
           handleRequest(data, res);
         } catch (e) {
+          console.error(`[WindsurfChatOpen] JSON 解析失败: ${e}`);
           res.writeHead(400);
           res.end(JSON.stringify({ error: 'Invalid JSON' }));
         }
       });
     } else if (req.method === 'GET' && req.url === '/health') {
+      console.log(`[WindsurfChatOpen] 健康检查`);
       res.writeHead(200);
       res.end('OK');
     } else {
+      console.log(`[WindsurfChatOpen] 未知路由: ${req.method} ${req.url}`);
       res.writeHead(404);
       res.end('Not Found');
     }
   });
 
-  // 使用固定端口
-  tryListenPort(FIXED_PORT, context);
+  tryListenPort(targetPort, context, localDir, 0);
 }
 
-function tryListenPort(port: number, context: vscode.ExtensionContext) {
+function tryListenPort(port: number, context: vscode.ExtensionContext, localDir: string, attempt: number) {
+  if (attempt >= MAX_PORT_ATTEMPTS) {
+    vscode.window.showErrorMessage(`WindsurfChatOpen: 无法找到可用端口`);
+    return;
+  }
+
   httpServer!.once('error', (err: NodeJS.ErrnoException) => {
-    console.error(`[WindsurfChatOpen] 无法启动 HTTP 服务器: ${err.message}`);
-    vscode.window.showErrorMessage(`WindsurfChatOpen: 端口 ${port} 被占用，请关闭其他实例`);
+    if (err.code === 'EADDRINUSE') {
+      console.log(`[WindsurfChatOpen] 端口 ${port} 被占用，尝试下一个端口`);
+      const nextPort = BASE_PORT + Math.floor(Math.random() * MAX_PORT_ATTEMPTS);
+      tryListenPort(nextPort, context, localDir, attempt + 1);
+    } else {
+      console.error(`[WindsurfChatOpen] HTTP 服务器错误: ${err.message}`);
+      vscode.window.showErrorMessage(`WindsurfChatOpen: ${err.message}`);
+    }
   });
 
   httpServer!.listen(port, '127.0.0.1', () => {
     httpServerPort = port;
     console.log(`[WindsurfChatOpen] HTTP 服务器启动在端口 ${httpServerPort}`);
+
+    // 写入端口文件
+    const portFile = path.join(localDir, 'port');
+    try {
+      if (!fs.existsSync(localDir)) {
+        fs.mkdirSync(localDir, { recursive: true });
+      }
+      fs.writeFileSync(portFile, port.toString(), 'utf-8');
+      console.log(`[WindsurfChatOpen] 端口已写入: ${portFile}`);
+    } catch (e) {
+      console.error(`[WindsurfChatOpen] 写入端口文件失败: ${e}`);
+    }
+
     // 端口启动后自动设置工作区
     if (vscode.workspace.workspaceFolders?.length) {
       setupWorkspace(context);
+    }
+
+    // 通知面板端口已启动
+    if (panelProvider) {
+      panelProvider.setPort(port);
     }
   });
 
@@ -107,29 +172,29 @@ function tryListenPort(port: number, context: vscode.ExtensionContext) {
   });
 }
 
-function handleRequest(data: { prompt: string; requestId: string; workspacePath?: string }, res: http.ServerResponse) {
-  // 验证工作区路径匹配
-  const currentWorkspace = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (data.workspacePath && currentWorkspace && path.normalize(data.workspacePath) !== path.normalize(currentWorkspace)) {
-    // 工作区不匹配，忽略请求
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Workspace mismatch' }));
-    return;
-  }
+async function handleRequest(data: { prompt: string; requestId: string }, res: http.ServerResponse) {
+  const requestTime = new Date().toISOString();
+  console.log(`[WindsurfChatOpen] ${requestTime} 收到请求: ${data.requestId}, prompt: ${data.prompt}`);
+
+  console.log(`[WindsurfChatOpen] panelProvider 状态: ${panelProvider ? '已初始化' : '未初始化'}`);
 
   if (panelProvider) {
-    panelProvider.showPrompt(data.prompt);
+    console.log(`[WindsurfChatOpen] ${requestTime} 调用 showPrompt: ${data.prompt}`);
+    await panelProvider.showPrompt(data.prompt);
+    console.log(`[WindsurfChatOpen] ${new Date().toISOString()} showPrompt 完成，现在设置 pendingCallback`);
   }
 
   pendingCallback = (response) => {
+    console.log(`[WindsurfChatOpen] 用户响应: ${JSON.stringify(response)}`);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(response));
   };
 
-  // 30 分钟后自动返回 continue
+  // 30 分钟后超时返回错误（非用户选择）
   setTimeout(() => {
     if (pendingCallback) {
-      pendingCallback({ action: 'continue', text: '', images: [] });
+      console.log(`[WindsurfChatOpen] 超时，返回错误`);
+      pendingCallback({ action: 'error', error: '等待用户响应超时 (30分钟)', text: '', images: [] });
       pendingCallback = null;
     }
   }, 30 * 60 * 1000);
@@ -164,7 +229,7 @@ function setupWorkspace(context: vscode.ExtensionContext) {
     const relativeScriptPath = `.${path.sep}${LOCAL_DIR_NAME}${path.sep}windsurf_chat.js`;
     const rulesContent = generateRulesContent(relativeScriptPath);
     const ruleMarker = '<!-- WINDSURF_CHAT_OPEN_V1 -->';
-    
+
     if (!fs.existsSync(rulesDest)) {
       // 文件不存在，直接创建
       fs.writeFileSync(rulesDest, rulesContent);
@@ -180,7 +245,7 @@ function setupWorkspace(context: vscode.ExtensionContext) {
     // 自动添加 .windsurfchatopen/ 和 .windsurfrules 到 .gitignore
     const gitignorePath = path.join(workspacePath, '.gitignore');
     const ignoreEntries = [LOCAL_DIR_NAME + '/', '.windsurfrules'];
-    
+
     if (fs.existsSync(gitignorePath)) {
       const content = fs.readFileSync(gitignorePath, 'utf-8');
       const entriesToAdd = ignoreEntries.filter(entry => !content.includes(entry));
@@ -200,7 +265,7 @@ function setupWorkspace(context: vscode.ExtensionContext) {
 function generateRulesContent(scriptPath: string): string {
   // 使用跨平台兼容的相对路径格式
   const normalizedPath = './.windsurfchatopen/windsurf_chat.js';
-  
+
   return `<!-- WINDSURF_CHAT_OPEN_V1 -->
 
 =======================================================================

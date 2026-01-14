@@ -14,8 +14,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
   private _onUserResponse = new vscode.EventEmitter<UserResponse>();
   public onUserResponse = this._onUserResponse.event;
+  private _port: number = 0;
+  private _viewReadyResolve?: () => void;
+  private _viewReadyPromise?: Promise<void>;
 
-  constructor(private readonly _extensionUri: vscode.Uri) {}
+  constructor(private readonly _extensionUri: vscode.Uri) {
+    this._resetViewReadyPromise();
+  }
+
+  private _resetViewReadyPromise() {
+    this._viewReadyPromise = new Promise<void>((resolve) => {
+      this._viewReadyResolve = resolve;
+    });
+  }
 
   resolveWebviewView(webviewView: vscode.WebviewView) {
     this._view = webviewView;
@@ -27,25 +38,84 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this._getHtml();
 
+    // 面板初始化后，如果已有端口信息则发送
+    if (this._port > 0) {
+      webviewView.webview.postMessage({ type: 'setPort', port: this._port });
+    }
+
     webviewView.webview.onDidReceiveMessage((message) => {
+      const timestamp = new Date().toISOString();
+      console.log(`[WindsurfChatOpen] ${timestamp} 收到 webview 消息: ${message.type}`);
+
       switch (message.type) {
+        case 'ready':
+          // Webview 初始化完成，通知等待者
+          console.log('[WindsurfChatOpen] Webview 报告已就绪');
+          if (this._viewReadyResolve) {
+            this._viewReadyResolve();
+          }
+          break;
         case 'continue':
+          console.log(`[WindsurfChatOpen] ${timestamp} 用户操作: continue (空提交或点击继续)`);
           this._onUserResponse.fire({ action: 'continue', text: '', images: [] });
           break;
         case 'end':
+          console.log(`[WindsurfChatOpen] ${timestamp} 用户操作: end`);
           this._onUserResponse.fire({ action: 'end', text: '', images: [] });
           break;
         case 'submit':
+          console.log(`[WindsurfChatOpen] ${timestamp} 用户操作: submit, text长度=${message.text?.length || 0}, 图片数=${message.images?.length || 0}`);
           this._handleSubmit(message.text, message.images || []);
           break;
       }
     });
+
+    // 面板被隐藏时重置 ready promise
+    webviewView.onDidChangeVisibility(() => {
+      if (!webviewView.visible) {
+        this._resetViewReadyPromise();
+      }
+    });
   }
 
-  showPrompt(prompt: string) {
+  async showPrompt(prompt: string) {
+    console.log('[WindsurfChatOpen] showPrompt 开始, prompt:', prompt.substring(0, 50));
+
+    // 如果面板未初始化，先打开面板
+    if (!this._view) {
+      console.log('[WindsurfChatOpen] 面板未初始化，尝试打开...');
+      await vscode.commands.executeCommand('windsurfChatOpen.panel.focus');
+    }
+
+    // 等待 webview 真正就绪（带超时保护）
+    const READY_TIMEOUT = 5000;
+    try {
+      await Promise.race([
+        this._viewReadyPromise,
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('Webview 就绪超时')), READY_TIMEOUT)
+        )
+      ]);
+      console.log('[WindsurfChatOpen] Webview 已就绪');
+    } catch (e) {
+      console.warn(`[WindsurfChatOpen] 等待 webview 就绪失败: ${e}, 继续尝试发送消息`);
+    }
+
     if (this._view) {
+      // 确保面板可见
+      this._view.show?.(false);  // false = 获取焦点
+      // 发送提示消息
       this._view.webview.postMessage({ type: 'showPrompt', prompt, startTimer: true });
-      this._view.show?.(true);
+      console.log('[WindsurfChatOpen] 已发送 showPrompt 消息');
+    } else {
+      console.error('[WindsurfChatOpen] 面板初始化失败，无法发送消息');
+    }
+  }
+
+  setPort(port: number) {
+    this._port = port;
+    if (this._view) {
+      this._view.webview.postMessage({ type: 'setPort', port });
     }
   }
 
@@ -121,6 +191,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       background: var(--vscode-badge-background);
       padding: 2px 6px;
       border-radius: 3px;
+    }
+    .port-info {
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 600;
     }
     .slogan {
       opacity: 0.8;
@@ -300,7 +377,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   <div class="header">
     <h1>WindsurfChat Open</h1>
     <div class="header-meta">
-      <span class="version">v1.2.0</span>
+      <span class="version">v1.4.4</span>
+      <span class="port-info" id="portInfo">端口: --</span>
       <span class="slogan">🎉 免费开源 · 安全可控 · 无需配置</span>
     </div>
   </div>
@@ -472,8 +550,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             }
           }, 1000);
         }
+      } else if (msg.type === 'setPort') {
+        const portInfo = document.getElementById('portInfo');
+        if (portInfo) {
+          portInfo.textContent = '端口: ' + msg.port;
+        }
       }
     });
+
+    // Webview 加载完成，通知 TypeScript 端
+    vscode.postMessage({ type: 'ready' });
   </script>
 </body>
 </html>`;

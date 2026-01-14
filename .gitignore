@@ -6,3 +6,4 @@ dist/
 # WindsurfChatOpen
 .windsurfchatopen/
 .windsurfrules
+.ace-tool/
