@@ -13,6 +13,7 @@ export class HttpService {
     private server: http.Server | null = null;
     private port: number = 0;
     private pendingRequests: Map<string, { res: http.ServerResponse, timer: NodeJS.Timeout }> = new Map();
+    private activeRequestId: string | null = null;
 
     constructor(
         private readonly context: vscode.ExtensionContext,
@@ -99,6 +100,7 @@ export class HttpService {
                     // Clear any existing request with same ID
                     this.clearPendingRequest(requestId);
 
+                    this.activeRequestId = requestId;
                     await this.onRequest(data);
 
                     const timeout = (typeof REQUEST_TIMEOUT_MS === 'number' && REQUEST_TIMEOUT_MS > 0)
@@ -144,20 +146,22 @@ export class HttpService {
     }
 
     public sendResponse(response: any) {
-        const requestIds = Array.from(this.pendingRequests.keys());
-        if (requestIds.length > 0) {
-            const latestId = requestIds[requestIds.length - 1];
-            const pending = this.pendingRequests.get(latestId);
-            if (pending) {
-                pending.res.writeHead(200, { 'Content-Type': 'application/json' });
-                pending.res.end(JSON.stringify(response));
-                clearTimeout(pending.timer);
-                this.pendingRequests.delete(latestId);
+        const requestId = this.activeRequestId;
+        if (requestId && this.pendingRequests.has(requestId)) {
+            const pending = this.pendingRequests.get(requestId)!;
+            pending.res.writeHead(200, { 'Content-Type': 'application/json' });
+            pending.res.end(JSON.stringify(response));
+            this.clearPendingRequest(requestId);
+            if (this.activeRequestId === requestId) {
+                this.activeRequestId = null;
             }
         }
     }
 
     public dispose() {
+        for (const requestId of Array.from(this.pendingRequests.keys())) {
+            this.clearPendingRequest(requestId);
+        }
         if (this.server) {
             this.server.close();
             this.server = null;
