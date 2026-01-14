@@ -180,16 +180,18 @@ function setupWorkspace(context: vscode.ExtensionContext) {
       }
     }
 
-    // 自动添加 .windsurfchatopen/ 到 .gitignore
+    // 自动添加 .windsurfchatopen/ 和 .windsurfrules 到 .gitignore
     const gitignorePath = path.join(workspacePath, '.gitignore');
-    const ignoreEntry = LOCAL_DIR_NAME + '/';
+    const ignoreEntries = [LOCAL_DIR_NAME + '/', '.windsurfrules'];
+    
     if (fs.existsSync(gitignorePath)) {
       const content = fs.readFileSync(gitignorePath, 'utf-8');
-      if (!content.includes(ignoreEntry)) {
-        fs.appendFileSync(gitignorePath, '\n# WindsurfChatOpen\n' + ignoreEntry + '\n');
+      const entriesToAdd = ignoreEntries.filter(entry => !content.includes(entry));
+      if (entriesToAdd.length > 0) {
+        fs.appendFileSync(gitignorePath, '\n# WindsurfChatOpen\n' + entriesToAdd.join('\n') + '\n');
       }
     } else {
-      fs.writeFileSync(gitignorePath, '# WindsurfChatOpen\n' + ignoreEntry + '\n');
+      fs.writeFileSync(gitignorePath, '# WindsurfChatOpen\n' + ignoreEntries.join('\n') + '\n');
     }
 
     console.log(`[WindsurfChatOpen] 工作区已设置: ${localDir}`);

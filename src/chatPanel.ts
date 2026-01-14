@@ -300,7 +300,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   <div class="header">
     <h1>WindsurfChat Open</h1>
     <div class="header-meta">
-      <span class="version">v1.1.2</span>
+      <span class="version">v1.1.3</span>
       <span class="slogan">🎉 免费开源 · 安全可控 · 无需配置</span>
     </div>
   </div>
@@ -341,7 +341,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let images = [];
 
     document.getElementById('btnSubmit').onclick = submit;
-    document.getElementById('btnEnd').onclick = () => vscode.postMessage({ type: 'end' });
+    document.getElementById('btnEnd').onclick = () => {
+      waitingIndicator.classList.remove('show');
+      vscode.postMessage({ type: 'end' });
+    };
     document.getElementById('modalClose').onclick = closeModal;
     imageModal.onclick = (e) => { if (e.target === imageModal) closeModal(); };
 
@@ -354,9 +357,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
 
     function submit() {
+      waitingIndicator.classList.remove('show');
       const text = inputText.value.trim();
       const validImages = images.filter(img => img !== null);
-      waitingIndicator.classList.remove('show');
       if (text || validImages.length > 0) {
         vscode.postMessage({ type: 'submit', text, images: validImages });
         inputText.value = '';
@@ -372,6 +375,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         e.preventDefault();
         submit();
       } else if (e.key === 'Escape') {
+        waitingIndicator.classList.remove('show');
         vscode.postMessage({ type: 'end' });
       }
     });
