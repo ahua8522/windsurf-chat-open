@@ -12,7 +12,7 @@ export interface RequestData {
 export class HttpService {
     private server: http.Server | null = null;
     private port: number = 0;
-    private pendingCallback: ((response: any) => void) | null = null;
+    private pendingRequests: Map<string, { res: http.ServerResponse, timer: NodeJS.Timeout }> = new Map();
 
     constructor(
         private readonly context: vscode.ExtensionContext,
@@ -94,20 +94,32 @@ export class HttpService {
             req.on('end', async () => {
                 try {
                     const data = JSON.parse(body) as RequestData;
+                    const requestId = data.requestId || Date.now().toString();
+
+                    // Clear any existing request with same ID
+                    this.clearPendingRequest(requestId);
+
                     await this.onRequest(data);
 
-                    this.pendingCallback = (response) => {
-                        res.writeHead(200, { 'Content-Type': 'application/json' });
-                        res.end(JSON.stringify(response));
-                    };
+                    const timeout = (typeof REQUEST_TIMEOUT_MS === 'number' && REQUEST_TIMEOUT_MS > 0)
+                        ? REQUEST_TIMEOUT_MS
+                        : 30 * 60 * 1000;
 
-                    // Timeout handler
-                    setTimeout(() => {
-                        if (this.pendingCallback) {
-                            this.pendingCallback({ action: 'error', error: 'Timed out waiting for user response', text: '', images: [] });
-                            this.pendingCallback = null;
+                    const timer = setTimeout(() => {
+                        const pending = this.pendingRequests.get(requestId);
+                        if (pending) {
+                            pending.res.writeHead(200, { 'Content-Type': 'application/json' });
+                            pending.res.end(JSON.stringify({
+                                action: 'error',
+                                error: 'Timed out waiting for user response',
+                                text: '',
+                                images: []
+                            }));
+                            this.pendingRequests.delete(requestId);
                         }
-                    }, REQUEST_TIMEOUT_MS);
+                    }, timeout);
+
+                    this.pendingRequests.set(requestId, { res, timer });
 
                 } catch (e) {
                     res.writeHead(400);
@@ -123,10 +135,25 @@ export class HttpService {
         }
     }
 
+    private clearPendingRequest(requestId: string) {
+        const pending = this.pendingRequests.get(requestId);
+        if (pending) {
+            clearTimeout(pending.timer);
+            this.pendingRequests.delete(requestId);
+        }
+    }
+
     public sendResponse(response: any) {
-        if (this.pendingCallback) {
-            this.pendingCallback(response);
-            this.pendingCallback = null;
+        const requestIds = Array.from(this.pendingRequests.keys());
+        if (requestIds.length > 0) {
+            const latestId = requestIds[requestIds.length - 1];
+            const pending = this.pendingRequests.get(latestId);
+            if (pending) {
+                pending.res.writeHead(200, { 'Content-Type': 'application/json' });
+                pending.res.end(JSON.stringify(response));
+                clearTimeout(pending.timer);
+                this.pendingRequests.delete(latestId);
+            }
         }
     }
 

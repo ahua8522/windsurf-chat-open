@@ -5,6 +5,13 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.5.1] - 2026-01-14
+
+### 修复
+- **[关键修复]** 解决“刚发起请求就立即超时”的幽灵计时器问题。
+- **并发安全**：重构 `HttpService` 支持多请求映射，确保每个请求拥有独立的计时器。
+- **计时器管理**：引入 `clearTimeout` 机制，在请求完成或重置时立即清理旧闹钟。
+
 ## [1.5.0] - 2026-01-14
 
 ### 改进 (Clean Code & KISS)
