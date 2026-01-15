@@ -8,7 +8,7 @@ graph TB
     B --> C[写入 .windsurfchatopen/port]
     C --> D[启动 HTTP 服务器<br/>127.0.0.1:端口]
     
-    E[AI 完成任务] --> F[调用 windsurf_chat.js]
+    E[AI 完成任务] --> F[调用 windsurf_chat.cjs]
     F --> G[读取 port 文件]
     G --> H[HTTP POST 到插件<br/>127.0.0.1:端口]
     H --> I[插件显示 WebView 面板]
@@ -33,13 +33,13 @@ graph TB
 工作区 A
 ├── .windsurfchatopen/
 │   ├── port (35386)
-│   └── windsurf_chat.js
+│   └── windsurf_chat.cjs
 └── HTTP 服务器: 127.0.0.1:35386
 
 工作区 B
 ├── .windsurfchatopen/
 │   ├── port (41203)
-│   └── windsurf_chat.js
+│   └── windsurf_chat.cjs
 └── HTTP 服务器: 127.0.0.1:41203
 ```
 
@@ -52,7 +52,7 @@ graph TB
 ## 数据流
 
 ```
-AI → windsurf_chat.js → 读取 port → HTTP POST → 插件 → WebView
+AI → windsurf_chat.cjs → 读取 port → HTTP POST → 插件 → WebView
                                                         ↓
 AI ← 脚本输出 ← HTTP 响应 ← 插件 ← 用户输入 ← WebView
 ```

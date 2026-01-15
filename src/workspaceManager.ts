@@ -13,7 +13,7 @@ export class WorkspaceManager {
             return;
         }
 
-        const scriptSrc = path.join(this.extensionPath, 'lib', 'windsurf_chat.js');
+        const scriptSrc = path.join(this.extensionPath, 'lib', 'windsurf_chat.cjs');
 
         for (const folder of folders) {
             const workspacePath = folder.uri.fsPath;
@@ -25,7 +25,7 @@ export class WorkspaceManager {
             }
 
             // Copy script to project directory
-            const scriptDest = path.join(localDir, 'windsurf_chat.js');
+            const scriptDest = path.join(localDir, 'windsurf_chat.cjs');
             if (fs.existsSync(scriptSrc)) {
                 fs.copyFileSync(scriptSrc, scriptDest);
             }
@@ -72,7 +72,7 @@ export class WorkspaceManager {
     }
 
     private generateRulesContent(): string {
-        const scriptPath = `./${LOCAL_DIR_NAME}/windsurf_chat.js`;
+        const scriptPath = `./${LOCAL_DIR_NAME}/windsurf_chat.cjs`;
 
         return `${RULE_MARKER}
 

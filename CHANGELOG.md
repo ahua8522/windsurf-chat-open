@@ -5,6 +5,12 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.6.1] - 2026-01-15
+
+### 修复
+- **[兼容性修复]** 将脚本文件从 `.js` 改为 `.cjs` 扩展名，解决在设置了 `"type": "module"` 的项目中执行脚本报错的问题。
+- 更新所有相关文档（`ARCHITECTURE.md`）中的脚本引用。
+
 ## [1.6.0] - 2026-01-14
 
 ### 新增与改进
