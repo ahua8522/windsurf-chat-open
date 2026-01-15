@@ -24,6 +24,13 @@ export class WorkspaceManager {
                 fs.mkdirSync(localDir, { recursive: true });
             }
 
+            // Remove old .js script if exists (migration from v1.6.0 to v1.6.1+)
+            const oldScriptPath = path.join(localDir, 'windsurf_chat.js');
+            if (fs.existsSync(oldScriptPath)) {
+                fs.unlinkSync(oldScriptPath);
+                console.log(`[WindsurfChatOpen] Removed old script: ${oldScriptPath}`);
+            }
+
             // Copy script to project directory
             const scriptDest = path.join(localDir, 'windsurf_chat.cjs');
             if (fs.existsSync(scriptSrc)) {
