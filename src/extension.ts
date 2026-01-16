@@ -44,6 +44,20 @@ class ExtensionStateManager {
       })
     );
 
+    // Listen for workspace folder changes
+    this.context.subscriptions.push(
+      vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        console.log('[WindsurfChatOpen] Workspace folders changed, re-running setup...');
+        if (vscode.workspace.workspaceFolders?.length) {
+          this.workspaceManager.setup();
+          // Re-write port files for new folders
+          if (this.httpService.getPort() > 0) {
+            this.httpService.writePortFiles(this.httpService.getPort());
+          }
+        }
+      })
+    );
+
     // Status bar item
     this.createStatusBarItem();
 

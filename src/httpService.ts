@@ -20,6 +20,10 @@ export class HttpService {
         private readonly onRequest: (data: RequestData) => Promise<void>
     ) { }
 
+    public getPort(): number {
+        return this.port;
+    }
+
     public async start(): Promise<number> {
         this.cleanupAllPortFiles();
         this.server = http.createServer((req, res) => this.handleIncomingRequest(req, res));
@@ -70,7 +74,7 @@ export class HttpService {
         });
     }
 
-    private writePortFiles(port: number) {
+    public writePortFiles(port: number) {
         const folders = vscode.workspace.workspaceFolders;
         if (!folders) return;
 
