@@ -7,10 +7,11 @@ import { WEBVIEW_READY_TIMEOUT_MS, LONG_TEXT_THRESHOLD, COMMANDS } from './const
 import { getPanelHtml } from './panelTemplate';
 
 export interface UserResponse {
-  action: 'continue' | 'end' | 'instruction';
+  action: 'continue' | 'end' | 'instruction' | 'error';
   text: string;
   images: string[];
   requestId?: string;
+  error?: string;
 }
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
@@ -95,10 +96,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       console.error(`[WindsurfChatOpen] ${e}`);
       // Webview not ready, fire error response
       this._onUserResponse.fire({
-        action: 'continue',
-        text: `[WindsurfChatOpen 警告] Webview 面板未就绪，请重试。如果问题持续，请尝试重新打开面板。`,
+        action: 'error',
+        text: '',
         images: [],
-        requestId
+        requestId,
+        error: 'Webview 面板未就绪，请重试。如果问题持续，请尝试重新打开面板。'
       });
       return;
     }
@@ -109,10 +111,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } else {
       console.error('[WindsurfChatOpen] Panel view not available after focus attempt');
       this._onUserResponse.fire({
-        action: 'continue',
-        text: `[WindsurfChatOpen 警告] 面板视图不可用，请重试。如果问题持续，请尝试重新打开面板。`,
+        action: 'error',
+        text: '',
         images: [],
-        requestId
+        requestId,
+        error: '面板视图不可用，请重试。如果问题持续，请尝试重新打开面板。'
       });
     }
   }
