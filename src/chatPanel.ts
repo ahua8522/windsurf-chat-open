@@ -91,15 +91,29 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           setTimeout(() => reject(new Error('Webview ready timeout')), WEBVIEW_READY_TIMEOUT_MS)
         )
       ]);
-    } catch {
-      // Continue anyway
+    } catch (e) {
+      console.error(`[WindsurfChatOpen] ${e}`);
+      // Webview not ready, fire error response
+      this._onUserResponse.fire({
+        action: 'continue',
+        text: `[WindsurfChatOpen 警告] Webview 面板未就绪，请重试。如果问题持续，请尝试重新打开面板。`,
+        images: [],
+        requestId
+      });
+      return;
     }
 
     if (this._view) {
       this._view.show?.(false);
       this._view.webview.postMessage({ type: 'showPrompt', prompt, requestId, startTimer: true });
     } else {
-      console.warn('[WindsurfChatOpen] Panel view not available after focus attempt');
+      console.error('[WindsurfChatOpen] Panel view not available after focus attempt');
+      this._onUserResponse.fire({
+        action: 'continue',
+        text: `[WindsurfChatOpen 警告] 面板视图不可用，请重试。如果问题持续，请尝试重新打开面板。`,
+        images: [],
+        requestId
+      });
     }
   }
 
@@ -113,6 +127,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const tempDir = os.tmpdir();
     const uniqueId = crypto.randomBytes(4).toString('hex');
     const savedImages: string[] = [];
+    const failedImages: number[] = [];
 
     images.forEach((img, i) => {
       try {
@@ -121,23 +136,29 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         fs.writeFileSync(imgPath, base64Data, 'base64');
         savedImages.push(imgPath);
       } catch (e) {
-        console.error(`[WindsurfChatOpen] Failed to save image: ${e}`);
+        console.error(`[WindsurfChatOpen] Failed to save image ${i}: ${e}`);
+        failedImages.push(i + 1);
       }
     });
+
+    let warningPrefix = '';
+    if (failedImages.length > 0) {
+      warningPrefix = `[WindsurfChatOpen 警告] 第 ${failedImages.join(', ')} 张图片保存失败\n\n`;
+    }
 
     if (text.length > LONG_TEXT_THRESHOLD) {
       const txtPath = path.join(tempDir, `windsurf_chat_instruction_${uniqueId}.txt`);
       fs.writeFileSync(txtPath, text, 'utf-8');
       this._onUserResponse.fire({
         action: 'instruction',
-        text: `[Content too long, saved to file]\n\nUser provided full instruction, please use read_file tool to read the following file:\n- ${txtPath}`,
+        text: `${warningPrefix}[Content too long, saved to file]\n\nUser provided full instruction, please use read_file tool to read the following file:\n- ${txtPath}`,
         images: savedImages,
         requestId: requestId
       });
     } else {
       this._onUserResponse.fire({
         action: 'instruction',
-        text,
+        text: warningPrefix + text,
         images: savedImages,
         requestId: requestId
       });
