@@ -35,6 +35,9 @@ export class WorkspaceManager {
             const scriptDest = path.join(localDir, 'windsurf_chat.cjs');
             if (fs.existsSync(scriptSrc)) {
                 fs.copyFileSync(scriptSrc, scriptDest);
+            } else {
+                console.error(`[WindsurfChatOpen] Script source not found: ${scriptSrc}`);
+                vscode.window.showWarningMessage(`WindsurfChatOpen: Script file not found at ${scriptSrc}`);
             }
 
             // Generate or update .windsurfrules

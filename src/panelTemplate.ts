@@ -357,14 +357,20 @@ export function getPanelHtml(version: string = '0.0.0'): string {
     }
 
     let countdownInterval;
+    let displayInterval;
     let remainingSeconds = 30 * 60;
 
     function startCountdown() {
       if (countdownInterval) clearInterval(countdownInterval);
+      if (displayInterval) clearInterval(displayInterval);
       remainingSeconds = 30 * 60;
       countdownInterval = setInterval(() => {
         remainingSeconds--;
-        if (remainingSeconds <= 0) clearInterval(countdownInterval);
+        if (remainingSeconds <= 0) {
+          clearInterval(countdownInterval);
+          clearInterval(displayInterval);
+          countdown.textContent = '';
+        }
       }, 1000);
     }
 
@@ -383,11 +389,12 @@ export function getPanelHtml(version: string = '0.0.0'): string {
         inputText.focus();
         if (msg.startTimer) {
           startCountdown();
-          const updateDisplay = setInterval(() => {
+          if (displayInterval) clearInterval(displayInterval);
+          displayInterval = setInterval(() => {
             if (remainingSeconds > 0) {
               countdown.textContent = getCountdownText();
             } else {
-              clearInterval(updateDisplay);
+              clearInterval(displayInterval);
               countdown.textContent = '';
             }
           }, 1000);

@@ -80,6 +80,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this._currentRequestId = requestId;
     if (!this._view) {
       await vscode.commands.executeCommand(COMMANDS.PANEL_FOCUS);
+      // Wait for view to be resolved after focus command
+      await new Promise<void>(resolve => setTimeout(resolve, 100));
     }
 
     try {
@@ -96,6 +98,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (this._view) {
       this._view.show?.(false);
       this._view.webview.postMessage({ type: 'showPrompt', prompt, requestId, startTimer: true });
+    } else {
+      console.warn('[WindsurfChatOpen] Panel view not available after focus attempt');
     }
   }
 
@@ -107,7 +111,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   private _handleSubmit(text: string, images: string[], requestId?: string) {
     const tempDir = os.tmpdir();
-    const timestamp = Date.now();
     const uniqueId = crypto.randomBytes(4).toString('hex');
     const savedImages: string[] = [];
 
@@ -123,7 +126,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     });
 
     if (text.length > LONG_TEXT_THRESHOLD) {
-      const txtPath = path.join(tempDir, `windsurf_chat_instruction_${timestamp}.txt`);
+      const txtPath = path.join(tempDir, `windsurf_chat_instruction_${uniqueId}.txt`);
       fs.writeFileSync(txtPath, text, 'utf-8');
       this._onUserResponse.fire({
         action: 'instruction',

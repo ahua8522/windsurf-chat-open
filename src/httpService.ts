@@ -99,8 +99,13 @@ export class HttpService {
                     const data = JSON.parse(body) as RequestData;
                     const requestId = data.requestId || Date.now().toString();
 
-                    // Clear any existing request with same ID
-                    this.clearPendingRequest(requestId);
+                    // Clear any existing request with same ID, sending cancellation response
+                    this.clearPendingRequest(requestId, true, {
+                        action: 'error',
+                        error: 'Request superseded by new request',
+                        text: '',
+                        images: []
+                    });
 
                     this.activeRequestId = requestId;
                     await this.onRequest(data);
@@ -139,10 +144,19 @@ export class HttpService {
         }
     }
 
-    private clearPendingRequest(requestId: string) {
+    private clearPendingRequest(requestId: string, sendResponse: boolean = false, responseData?: any) {
         const pending = this.pendingRequests.get(requestId);
         if (pending) {
             clearTimeout(pending.timer);
+            if (sendResponse && !pending.res.writableEnded) {
+                pending.res.writeHead(200, { 'Content-Type': 'application/json' });
+                pending.res.end(JSON.stringify(responseData || {
+                    action: 'error',
+                    error: 'Request cancelled',
+                    text: '',
+                    images: []
+                }));
+            }
             this.pendingRequests.delete(requestId);
         }
     }
@@ -163,7 +177,12 @@ export class HttpService {
     public dispose() {
         this.cleanupAllPortFiles();
         for (const requestId of Array.from(this.pendingRequests.keys())) {
-            this.clearPendingRequest(requestId);
+            this.clearPendingRequest(requestId, true, {
+                action: 'error',
+                error: 'Extension deactivated',
+                text: '',
+                images: []
+            });
         }
         if (this.server) {
             this.server.close();
