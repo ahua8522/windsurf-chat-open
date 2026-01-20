@@ -2,7 +2,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import * as notifier from 'node-notifier';
+import notifier from 'node-notifier';
 import { BASE_PORT, MAX_PORT_ATTEMPTS, LOCAL_DIR_NAME, REQUEST_TIMEOUT_MS } from './constants';
 
 export interface RequestData {
