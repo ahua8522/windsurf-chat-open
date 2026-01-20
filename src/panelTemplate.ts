@@ -357,11 +357,11 @@ export function getPanelHtml(version: string = '0.0.0'): string {
     }
 
     let countdownInterval;
-    let remainingSeconds = 30 * 60;
+    let remainingSeconds = 24 * 60 * 60;
 
     function startCountdown() {
       if (countdownInterval) clearInterval(countdownInterval);
-      remainingSeconds = 30 * 60;
+      remainingSeconds = 24 * 60 * 60;
       countdownInterval = setInterval(() => {
         remainingSeconds--;
         if (remainingSeconds <= 0) clearInterval(countdownInterval);
@@ -369,9 +369,10 @@ export function getPanelHtml(version: string = '0.0.0'): string {
     }
 
     function getCountdownText() {
-      const minutes = Math.floor(remainingSeconds / 60);
+      const hours = Math.floor(remainingSeconds / 3600);
+      const minutes = Math.floor((remainingSeconds % 3600) / 60);
       const seconds = remainingSeconds % 60;
-      return '⏱️ ' + minutes + ':' + seconds.toString().padStart(2, '0');
+      return '⏱️ ' + hours.toString().padStart(2, '0') + ':' + minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0');
     }
 
     window.addEventListener('message', (e) => {

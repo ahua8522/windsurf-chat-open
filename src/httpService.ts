@@ -2,6 +2,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import * as notifier from 'node-notifier';
 import { BASE_PORT, MAX_PORT_ATTEMPTS, LOCAL_DIR_NAME, REQUEST_TIMEOUT_MS } from './constants';
 
 export interface RequestData {
@@ -105,6 +106,9 @@ export class HttpService {
                     this.activeRequestId = requestId;
                     await this.onRequest(data);
 
+                    // Send system notification when AI completes a round
+                    this.sendSystemNotification();
+
                     const timeout = (typeof REQUEST_TIMEOUT_MS === 'number' && REQUEST_TIMEOUT_MS > 0)
                         ? REQUEST_TIMEOUT_MS
                         : 30 * 60 * 1000;
@@ -136,6 +140,20 @@ export class HttpService {
         } else {
             res.writeHead(404);
             res.end('Not Found');
+        }
+    }
+
+    private sendSystemNotification() {
+        try {
+            notifier.notify({
+                title: 'WindsurfChat Open',
+                message: 'AI 已完成任务，等待您的反馈',
+                icon: undefined,
+                sound: true,
+                wait: false
+            });
+        } catch (e) {
+            console.error(`[WindsurfChatOpen] Failed to send notification: ${e}`);
         }
     }
 
