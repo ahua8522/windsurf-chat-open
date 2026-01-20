@@ -318,8 +318,23 @@ export function getPanelHtml(version: string = '0.0.0'): string {
       e.preventDefault();
       const files = e.dataTransfer?.files;
       if (!files) return;
+      const paths = [];
       for (const file of files) {
-        if (file.type.startsWith('image/')) addImage(file);
+        if (file.type.startsWith('image/')) {
+          addImage(file);
+        } else if (file.path) {
+          paths.push(file.path);
+        }
+      }
+      const uriList = e.dataTransfer?.getData('text/uri-list');
+      if (uriList) {
+        const parsed = parseUriList(uriList);
+        for (const path of parsed) paths.push(path);
+      }
+      if (paths.length > 0) {
+        const existing = inputText.value.trim();
+        const appended = paths.map((path) => '【' + path + '】').join(' ');
+        inputText.value = existing ? existing + ' ' + appended : appended;
       }
     });
 
@@ -349,6 +364,23 @@ export function getPanelHtml(version: string = '0.0.0'): string {
         imagePreview.appendChild(wrapper);
       };
       reader.readAsDataURL(file);
+    }
+
+    function parseUriList(uriList) {
+      return uriList
+        .split(/\\r?\\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith('#'))
+        .map((line) => {
+          try {
+            if (line.startsWith('file://')) {
+              return decodeURIComponent(line.replace('file://', ''));
+            }
+            return decodeURIComponent(line);
+          } catch {
+            return line;
+          }
+        });
     }
 
     function removeImage(index, wrapper) {
