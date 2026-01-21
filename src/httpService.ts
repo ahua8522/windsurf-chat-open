@@ -93,9 +93,10 @@ export class HttpService {
 
     private handleIncomingRequest(req: http.IncomingMessage, res: http.ServerResponse) {
         if (req.method === 'POST' && req.url === '/request') {
-            let body = '';
-            req.on('data', chunk => body += chunk);
+            const chunks: Buffer[] = [];
+            req.on('data', chunk => chunks.push(Buffer.from(chunk)));
             req.on('end', async () => {
+                const body = Buffer.concat(chunks).toString('utf-8');
                 try {
                     const data = JSON.parse(body) as RequestData;
                     const requestId = data.requestId || Date.now().toString();
@@ -111,7 +112,7 @@ export class HttpService {
 
                     const timeout = (typeof REQUEST_TIMEOUT_MS === 'number' && REQUEST_TIMEOUT_MS > 0)
                         ? REQUEST_TIMEOUT_MS
-                        : 30 * 60 * 1000;
+                        : 24 * 60 * 60 * 1000;
 
                     const timer = setTimeout(() => {
                         const pending = this.pendingRequests.get(requestId);
@@ -169,8 +170,13 @@ export class HttpService {
         const id = requestId || this.activeRequestId;
         if (id && this.pendingRequests.has(id)) {
             const pending = this.pendingRequests.get(id)!;
-            pending.res.writeHead(200, { 'Content-Type': 'application/json' });
-            pending.res.end(JSON.stringify(response));
+            const jsonData = JSON.stringify(response);
+            const buffer = Buffer.from(jsonData, 'utf-8');
+            pending.res.writeHead(200, {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Content-Length': buffer.length
+            });
+            pending.res.end(buffer);
             this.clearPendingRequest(id);
             if (this.activeRequestId === id) {
                 this.activeRequestId = null;

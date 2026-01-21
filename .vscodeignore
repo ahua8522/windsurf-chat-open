@@ -1,0 +1,35 @@
+# Source files
+src/**
+tsconfig.json
+.gitignore
+.windsurfrules
+
+# Test files
+test_*.js
+
+# Build artifacts
+*.vsix
+
+# Output directory
+releases/**
+
+# Development files
+.vscode/**
+.vscode-test/**
+node_modules/**/.bin/**
+
+# Documentation (keep only essential)
+ARCHITECTURE.md
+changelog.md
+
+# Git
+.git/**
+.github/**
+
+# NPM
+.npmrc
+package-lock.json
+
+# Temp files
+*.log
+.DS_Store

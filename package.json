@@ -58,7 +58,7 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "npm run compile && npx @vscode/vsce package --out releases/"
+    "package": "npm run compile && npx @vscode/vsce package --out releases"
   },
   "dependencies": {
     "node-notifier": "^10.0.1"
