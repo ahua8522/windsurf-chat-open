@@ -5,12 +5,19 @@ import * as os from 'os';
 import { ChatPanelProvider } from './chatPanel';
 import { HttpService, RequestData } from './httpService';
 import { WorkspaceManager } from './workspaceManager';
-import { COMMANDS, VIEWS, TEMP_FILE_MAX_AGE_MS } from './constants';
+import {
+  COMMANDS,
+  VIEWS,
+  TEMP_FILE_MAX_AGE_MS,
+  TEMP_FILE_CLEANUP_INTERVAL_MS,
+  HTTP_SERVER_START_DELAY_MS
+} from './constants';
 
 class ExtensionStateManager {
   private httpService: HttpService;
   private workspaceManager: WorkspaceManager;
   private panelProvider: ChatPanelProvider;
+  private cleanupTimer?: NodeJS.Timeout;
 
   constructor(private context: vscode.ExtensionContext) {
     const version = context.extension.packageJSON.version || '0.0.0';
@@ -23,6 +30,7 @@ class ExtensionStateManager {
     console.log('[WindsurfChatOpen] Activating extension...');
 
     this.cleanOldTempFiles();
+    this.startPeriodicCleanup();
 
     this.context.subscriptions.push(
       vscode.window.registerWebviewViewProvider(VIEWS.PANEL, this.panelProvider, {
@@ -76,7 +84,7 @@ class ExtensionStateManager {
       } catch (err) {
         vscode.window.showErrorMessage(`WindsurfChatOpen failed to start: ${err}`);
       }
-    }, 100);
+    }, HTTP_SERVER_START_DELAY_MS);
 
     console.log('[WindsurfChatOpen] Extension activated');
   }
@@ -92,9 +100,27 @@ class ExtensionStateManager {
 
   private async handleRequest(data: RequestData) {
     console.log(`[WindsurfChatOpen] Received request: ${data.requestId}`);
+    // 如果请求中没有超时配置，使用面板的配置
+    if (data.timeoutMinutes === undefined) {
+      data.timeoutMinutes = this.panelProvider.getTimeoutMinutes();
+    }
     await this.panelProvider.showPrompt(data.prompt, data.requestId);
   }
 
+
+  private startPeriodicCleanup() {
+    this.cleanupTimer = setInterval(() => {
+      this.cleanOldTempFiles();
+    }, TEMP_FILE_CLEANUP_INTERVAL_MS);
+
+    this.context.subscriptions.push({
+      dispose: () => {
+        if (this.cleanupTimer) {
+          clearInterval(this.cleanupTimer);
+        }
+      }
+    });
+  }
 
   private cleanOldTempFiles() {
     const tempDir = os.tmpdir();
@@ -113,16 +139,23 @@ class ExtensionStateManager {
               fs.unlinkSync(filePath);
               count++;
             }
-          } catch { }
+          } catch (e) {
+            // 忽略单个文件的错误，继续处理其他文件
+          }
         }
       }
-      if (count > 0) console.log(`[WindsurfChatOpen] Cleaned ${count} old temp files`);
+      if (count > 0) {
+        console.log(`[WindsurfChatOpen] Cleaned ${count} old temp files`);
+      }
     } catch (e) {
       console.error(`[WindsurfChatOpen] Failed to clean temp files: ${e}`);
     }
   }
 
   public deactivate() {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+    }
     this.httpService.dispose();
     console.log('[WindsurfChatOpen] Extension deactivated');
   }

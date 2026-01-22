@@ -215,6 +215,32 @@ export function getPanelHtml(version: string = '0.0.0'): string {
       color: var(--vscode-descriptionForeground);
       margin-top: 4px;
     }
+    .timeout-config {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+    .timeout-config label {
+      color: var(--vscode-descriptionForeground);
+    }
+    .timeout-config input {
+      width: 80px;
+      padding: 4px 8px;
+      border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35));
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border-radius: 3px;
+      font-size: 12px;
+    }
+    .timeout-config input:focus {
+      outline: 1px solid var(--vscode-focusBorder);
+    }
+    .timeout-config .hint-text {
+      color: var(--vscode-descriptionForeground);
+      opacity: 0.7;
+    }
   </style>
 </head>
 <body>
@@ -225,6 +251,13 @@ export function getPanelHtml(version: string = '0.0.0'): string {
       <span class="port-info" id="portInfo">端口: --</span>
       <span class="slogan">🎉 免费开源 · 安全可控 · 无需配置</span>
     </div>
+  </div>
+
+  <div class="timeout-config">
+    <label for="timeoutInput">超时时间:</label>
+    <input type="number" id="timeoutInput" min="0" step="1" value="30" />
+    <span>分钟</span>
+    <span class="hint-text">(0=不限制)</span>
   </div>
   
   <div class="waiting-indicator" id="waitingIndicator">
@@ -260,8 +293,22 @@ export function getPanelHtml(version: string = '0.0.0'): string {
     const imageModal = document.getElementById('imageModal');
     const modalImage = document.getElementById('modalImage');
     const waitingIndicator = document.getElementById('waitingIndicator');
+    const timeoutInput = document.getElementById('timeoutInput');
     let images = [];
     let currentRequestId = '';
+
+    const MAX_IMAGE_COUNT = 10;
+    const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+    let timeoutMinutes = 30; // 默认30分钟
+
+    // 监听超时时间输入变化
+    timeoutInput.addEventListener('change', () => {
+      const value = parseInt(timeoutInput.value);
+      if (!isNaN(value) && value >= 0) {
+        timeoutMinutes = value;
+        vscode.postMessage({ type: 'setTimeout', timeoutMinutes: value });
+      }
+    });
 
     document.getElementById('btnSubmit').onclick = submit;
     document.getElementById('btnEnd').onclick = () => {
@@ -326,24 +373,36 @@ export function getPanelHtml(version: string = '0.0.0'): string {
     inputText.addEventListener('dragover', (e) => e.preventDefault());
 
     function addImage(file) {
+      // 检查图片数量限制
+      if (images.filter(img => img !== null).length >= MAX_IMAGE_COUNT) {
+        alert('图片数量超过限制（最多 ' + MAX_IMAGE_COUNT + ' 张）');
+        return;
+      }
+
+      // 检查图片大小限制
+      if (file.size > MAX_IMAGE_SIZE) {
+        alert('图片大小超过限制（单张最大 5MB）');
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (e) => {
         const dataUrl = e.target.result;
         const index = images.length;
         images.push(dataUrl);
-        
+
         const wrapper = document.createElement('div');
         wrapper.className = 'img-wrapper';
-        
+
         const img = document.createElement('img');
         img.src = dataUrl;
         img.onclick = () => showModal(dataUrl);
-        
+
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'img-delete';
         deleteBtn.textContent = '×';
         deleteBtn.onclick = (e) => { e.stopPropagation(); removeImage(index, wrapper); };
-        
+
         wrapper.appendChild(img);
         wrapper.appendChild(deleteBtn);
         imagePreview.appendChild(wrapper);
@@ -358,12 +417,19 @@ export function getPanelHtml(version: string = '0.0.0'): string {
 
     let countdownInterval;
     let displayInterval;
-    let remainingSeconds = 30 * 60;
+    let remainingSeconds = 0;
 
     function startCountdown() {
       if (countdownInterval) clearInterval(countdownInterval);
       if (displayInterval) clearInterval(displayInterval);
-      remainingSeconds = 30 * 60;
+
+      // 如果超时时间为0，不启动倒计时
+      if (timeoutMinutes === 0) {
+        countdown.textContent = '⏱️ 不限制';
+        return;
+      }
+
+      remainingSeconds = timeoutMinutes * 60;
       countdownInterval = setInterval(() => {
         remainingSeconds--;
         if (remainingSeconds <= 0) {
@@ -389,18 +455,25 @@ export function getPanelHtml(version: string = '0.0.0'): string {
         inputText.focus();
         if (msg.startTimer) {
           startCountdown();
-          if (displayInterval) clearInterval(displayInterval);
-          displayInterval = setInterval(() => {
-            if (remainingSeconds > 0) {
-              countdown.textContent = getCountdownText();
-            } else {
-              clearInterval(displayInterval);
-              countdown.textContent = '';
-            }
-          }, 1000);
+          if (timeoutMinutes > 0) {
+            if (displayInterval) clearInterval(displayInterval);
+            displayInterval = setInterval(() => {
+              if (remainingSeconds > 0) {
+                countdown.textContent = getCountdownText();
+              } else {
+                clearInterval(displayInterval);
+                countdown.textContent = '';
+              }
+            }, 1000);
+          }
         }
       } else if (msg.type === 'setPort') {
         document.getElementById('portInfo').textContent = '端口: ' + msg.port;
+      } else if (msg.type === 'setTimeoutMinutes') {
+        if (typeof msg.timeoutMinutes === 'number' && msg.timeoutMinutes >= 0) {
+          timeoutMinutes = msg.timeoutMinutes;
+          timeoutInput.value = msg.timeoutMinutes;
+        }
       }
     });
 
