@@ -180,6 +180,46 @@ export function getPanelHtml(version: string = '0.0.0'): string {
       font-weight: bold;
       line-height: 1;
     }
+    .image-preview .file-wrapper {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .image-preview .file-icon {
+      font-size: 16px;
+    }
+    .image-preview .file-name {
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .image-preview .file-delete {
+      width: 18px;
+      height: 18px;
+      background: #d32f2f;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+      line-height: 1;
+      margin-left: 4px;
+    }
+    .image-preview .file-delete:hover {
+      background: #b71c1c;
+    }
     .image-preview .img-delete:hover {
       background: #b71c1c;
     }
@@ -397,7 +437,7 @@ export function getPanelHtml(version: string = '0.0.0'): string {
   </div>
   
   <div class="input-area">
-    <textarea id="inputText" placeholder="输入反馈或指令...支持拖拽图片"></textarea>
+    <textarea id="inputText" placeholder="输入反馈或指令...支持拖拽图片和文本文件"></textarea>
     <div class="image-preview" id="imagePreview"></div>
     <div class="buttons">
       <button class="btn-primary" id="btnSubmit">提交 (Ctrl+Enter)</button>
@@ -423,12 +463,24 @@ export function getPanelHtml(version: string = '0.0.0'): string {
     const timeoutInput = document.getElementById('timeoutInput');
     const connectionStatus = document.getElementById('connectionStatus');
     let images = [];
+    let filePathMap = {}; // 文件名 -> 完整路径的映射
     let currentRequestId = '';
     let currentPort = 0;
 
     const MAX_IMAGE_COUNT = 10;
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
     let timeoutMinutes = 30; // 默认30分钟
+
+    // 支持的文本文件扩展名
+    const TEXT_FILE_EXTENSIONS = [
+      '.txt', '.md', '.json', '.xml', '.yaml', '.yml', '.toml',
+      '.js', '.ts', '.jsx', '.tsx', '.vue', '.html', '.css', '.scss', '.less',
+      '.py', '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.rs', '.php',
+      '.rb', '.swift', '.kt', '.scala', '.sh', '.bash', '.zsh', '.fish',
+      '.sql', '.graphql', '.proto', '.thrift',
+      '.log', '.csv', '.ini', '.conf', '.config', '.env',
+      '.gitignore', '.dockerignore', '.editorconfig', '.prettierrc', '.eslintrc'
+    ];
 
     // 设置展开/收起
     const settingsToggle = document.getElementById('settingsToggle');
@@ -475,12 +527,26 @@ export function getPanelHtml(version: string = '0.0.0'): string {
 
     function submit() {
       waitingIndicator.classList.remove('show');
-      const text = inputText.value.trim();
+      let text = inputText.value.trim();
       const validImages = images.filter(img => img !== null);
+
+      // 替换文本中的文件名为完整路径
+      for (const fileName in filePathMap) {
+        const fullPath = filePathMap[fileName];
+        // 使用简单的字符串替换，避免正则表达式转义问题
+        text = text.split(fileName).join(fullPath);
+      }
+
       if (text || validImages.length > 0) {
-        vscode.postMessage({ type: 'submit', text, images: validImages, requestId: currentRequestId });
+        vscode.postMessage({
+          type: 'submit',
+          text,
+          images: validImages,
+          requestId: currentRequestId
+        });
         inputText.value = '';
         images = [];
+        filePathMap = {}; // 清空文件路径映射
         imagePreview.innerHTML = '';
       } else {
         vscode.postMessage({ type: 'continue', requestId: currentRequestId });
@@ -509,11 +575,95 @@ export function getPanelHtml(version: string = '0.0.0'): string {
     });
 
     inputText.addEventListener('drop', (e) => {
+      console.log('[WindsurfChatOpen] Drop event triggered!');
+      const items = e.dataTransfer?.items;
+
+      console.log('[WindsurfChatOpen] Items:', items);
+
+      if (!items || items.length === 0) {
+        console.log('[WindsurfChatOpen] No items, returning');
+        return;
+      }
+
+      // 阻止默认行为
       e.preventDefault();
-      const files = e.dataTransfer?.files;
-      if (!files) return;
-      for (const file of files) {
-        if (file.type.startsWith('image/')) addImage(file);
+
+      // 记录拖拽前的文本和光标位置
+      const textBefore = inputText.value;
+      const cursorPos = inputText.selectionStart;
+
+      console.log('[WindsurfChatOpen] Text before:', textBefore);
+      console.log('[WindsurfChatOpen] Cursor position:', cursorPos);
+
+      // 处理每个拖拽项
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        console.log('[WindsurfChatOpen] Item', i, '- kind:', item.kind, 'type:', item.type);
+
+        // 处理文件类型的项
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (file) {
+            console.log('[WindsurfChatOpen] Got file:', file.name, 'type:', file.type);
+
+            // 处理图片
+            if (file.type.startsWith('image/')) {
+              console.log('[WindsurfChatOpen] Processing image:', file.name);
+              addImage(file);
+            }
+          }
+        }
+
+        // 处理字符串类型的项（文件路径）
+        if (item.kind === 'string' && item.type === 'text/uri-list') {
+          console.log('[WindsurfChatOpen] Processing uri-list');
+          item.getAsString((uriString) => {
+            console.log('[WindsurfChatOpen] Got URI:', uriString);
+
+            if (uriString) {
+              // 解析 file:// URI
+              let filePath = uriString.trim();
+              if (filePath.startsWith('file:///')) {
+                filePath = filePath.substring(8); // 移除 file:///
+                // Windows 路径处理
+                if (!/^[a-zA-Z]:/.test(filePath)) {
+                  filePath = '/' + filePath; // Unix 路径
+                }
+              } else if (filePath.startsWith('file://')) {
+                filePath = filePath.substring(7); // 移除 file://
+              }
+              filePath = decodeURIComponent(filePath);
+
+              console.log('[WindsurfChatOpen] Parsed file path:', filePath);
+
+              // 提取文件名
+              const fileName = filePath.split(/[\\/]/).pop() || '';
+              console.log('[WindsurfChatOpen] File name:', fileName);
+
+              // 检查是否是文本文件
+              if (isTextFileByName(fileName)) {
+                console.log('[WindsurfChatOpen] Is text file, adding to map');
+
+                // 保存文件名到路径的映射
+                filePathMap[fileName] = filePath;
+
+                // 在光标位置插入文件名
+                const before = textBefore.substring(0, cursorPos);
+                const after = textBefore.substring(cursorPos);
+                inputText.value = before + fileName + after;
+
+                // 更新光标位置
+                const newCursorPos = cursorPos + fileName.length;
+                inputText.setSelectionRange(newCursorPos, newCursorPos);
+                inputText.focus();
+
+                console.log('[WindsurfChatOpen] Inserted file name at position', cursorPos);
+              } else {
+                console.log('[WindsurfChatOpen] Not a text file, skipping');
+              }
+            }
+          });
+        }
       }
     });
 
@@ -559,6 +709,62 @@ export function getPanelHtml(version: string = '0.0.0'): string {
 
     function removeImage(index, wrapper) {
       images[index] = null;
+      wrapper.remove();
+    }
+
+    function isTextFile(file) {
+      const fileName = file.name.toLowerCase();
+      return TEXT_FILE_EXTENSIONS.some(ext => fileName.endsWith(ext));
+    }
+
+    function isTextFileByName(fileName) {
+      const lowerName = fileName.toLowerCase();
+      return TEXT_FILE_EXTENSIONS.some(ext => lowerName.endsWith(ext));
+    }
+
+    function addFileWithPath(fileName, filePath, fileSize) {
+      // 检查文件数量限制
+      if (files.length >= MAX_FILE_COUNT) {
+        alert('文件数量超过限制（最多 ' + MAX_FILE_COUNT + ' 个）');
+        return;
+      }
+
+      const fileIndex = files.length;
+      files.push({
+        name: fileName,
+        path: filePath,
+        size: fileSize
+      });
+
+      // 显示文件预览
+      const wrapper = document.createElement('div');
+      wrapper.className = 'file-wrapper';
+
+      const fileIcon = document.createElement('span');
+      fileIcon.className = 'file-icon';
+      fileIcon.textContent = '📄';
+
+      const fileNameSpan = document.createElement('span');
+      fileNameSpan.className = 'file-name';
+      fileNameSpan.textContent = fileName;
+      fileNameSpan.title = filePath;
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'file-delete';
+      deleteBtn.textContent = '×';
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        removeFile(fileIndex, wrapper);
+      };
+
+      wrapper.appendChild(fileIcon);
+      wrapper.appendChild(fileNameSpan);
+      wrapper.appendChild(deleteBtn);
+      imagePreview.appendChild(wrapper);
+    }
+
+    function removeFile(index, wrapper) {
+      files.splice(index, 1);
       wrapper.remove();
     }
 

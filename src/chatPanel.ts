@@ -17,6 +17,7 @@ export interface UserResponse {
   action: 'continue' | 'end' | 'instruction' | 'error';
   text: string;
   images: string[];
+  files?: Array<{ name: string; path: string; size: number }>;
   requestId?: string;
   error?: string;
 }
@@ -25,6 +26,7 @@ interface WebviewMessage {
   type: 'ready' | 'continue' | 'end' | 'submit' | 'setTimeout';
   text?: string;
   images?: string[];
+  files?: Array<{ name: string; path: string; size: number }>;
   requestId?: string;
   timeoutMinutes?: number;
 }
@@ -90,7 +92,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this._onUserResponse.fire({ action: 'end', text: '', images: [], requestId });
         break;
       case 'submit':
-        this._handleSubmit(message.text || '', message.images || [], requestId);
+        this._handleSubmit(message.text || '', message.images || [], message.files, requestId);
         break;
       case 'setTimeout':
         if (typeof message.timeoutMinutes === 'number' && message.timeoutMinutes >= 0) {
@@ -154,7 +156,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this._view?.webview.postMessage({ type: 'setPort', port });
   }
 
-  private _handleSubmit(text: string, images: string[], requestId?: string) {
+  private _handleSubmit(text: string, images: string[], files?: Array<{ name: string; path: string; size: number }>, requestId?: string) {
     // 验证图片数量
     if (images.length > MAX_IMAGE_COUNT) {
       this._onUserResponse.fire({
@@ -172,6 +174,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const savedImages: string[] = [];
     const failedImages: number[] = [];
     const oversizedImages: number[] = [];
+
+    // 处理文件路径
+    let filesText = '';
+    if (files && files.length > 0) {
+      filesText = '\n\n用户拖拽了以下文件，请使用 read_file 工具读取：\n';
+      files.forEach(file => {
+        filesText += `- ${file.path} (${file.name})\n`;
+      });
+    }
 
     images.forEach((img, i) => {
       try {
@@ -207,8 +218,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         fs.writeFileSync(txtPath, text, 'utf-8');
         this._onUserResponse.fire({
           action: 'instruction',
-          text: `${warningPrefix}[Content too long, saved to file]\n\nUser provided full instruction, please use read_file tool to read the following file:\n- ${txtPath}`,
+          text: `${warningPrefix}[Content too long, saved to file]\n\nUser provided full instruction, please use read_file tool to read the following file:\n- ${txtPath}${filesText}`,
           images: savedImages,
+          files: files,
           requestId: requestId
         });
       } catch (e) {
@@ -224,8 +236,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } else {
       this._onUserResponse.fire({
         action: 'instruction',
-        text: warningPrefix + text,
+        text: warningPrefix + text + filesText,
         images: savedImages,
+        files: files,
         requestId: requestId
       });
     }
