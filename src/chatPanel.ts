@@ -39,7 +39,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _viewReadyResolve?: () => void;
   private _viewReadyPromise?: Promise<void>;
   private _currentRequestId?: string;
-  private _timeoutMinutes: number = 30; // 默认30分钟
+  private _timeoutMinutes: number = 0; // 默认不限制
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
