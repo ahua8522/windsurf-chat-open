@@ -182,9 +182,9 @@ export function getPanelScript(): string {
               
               // URL 解码
               filePath = decodeURIComponent(filePath);
-              
+
               // 统一路径分隔符为反斜杠（Windows 标准）
-              filePath = filePath.replace(/\//g, '\\');
+              filePath = filePath.replace(/\\//g, '\\\\\\\\');
 
               const pathParts = filePath.split(/[\\\\\\/]/);
               const name = pathParts.pop() || '';
