@@ -2,6 +2,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import notifier from 'node-notifier';
 import {
     BASE_PORT,
     MAX_PORT_ATTEMPTS,
@@ -215,6 +216,10 @@ export class HttpService {
                         );
                     }
 
+                    // 发送系统通知
+                    this.sendSystemNotification(data.prompt, requestId);
+
+                    // Clear any existing request with same ID, sending cancellation response
                     this.clearPendingRequest(requestId, true, this.createErrorResponse(ERROR_MESSAGES.REQUEST_SUPERSEDED));
 
                     const initialTimeoutMinutes = data.timeoutMinutes ?? this.getTimeoutMinutes();
@@ -346,6 +351,22 @@ export class HttpService {
         pending.timer = setTimeout(() => {
             this.startTimeoutCheck(requestId);
         }, remaining);
+    }
+
+    private sendSystemNotification(prompt: string, requestId: string) {
+        const truncatedPrompt = prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt;
+        notifier.notify({
+            title: 'WindsurfChat Open',
+            message: `AI 已完成任务，等待您的下一步指令`,
+            sound: true,
+            wait: false
+        }, (err, response) => {
+            if (err) {
+                console.error(`[WindsurfChatOpen] 系统通知发送失败: ${err}`);
+            } else {
+                console.log(`[WindsurfChatOpen] 系统通知已发送: ${response}`);
+            }
+        });
     }
 
     private clearPendingRequest(requestId: string, sendResponse: boolean = false, responseData?: ErrorResponse) {

@@ -2,7 +2,7 @@
   "name": "windsurf-chat-open",
   "displayName": "WindsurfChatOpen",
   "description": "开源版 WindsurfChat - 让 AI 停下来听你说话",
-  "version": "1.7.2",
+  "version": "2.10",
   "repository": {
     "type": "git",
     "url": "https://github.com/nicepkg/windsurf-chat-open"
@@ -59,11 +59,15 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "npm run compile && npx @vscode/vsce package --out releases/"
+    "package": "npm run compile && npx @vscode/vsce package"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/node-notifier": "^8.0.5",
     "@types/vscode": "^1.80.0",
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "node-notifier": "^10.0.1"
   }
 }
