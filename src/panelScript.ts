@@ -16,6 +16,7 @@ export function getPanelScript(): string {
     let images = [];
     let currentRequestId = '';
     let currentPort = 0;
+    let workspaceRoot = ''; // 工作区根目录
 
     const MAX_IMAGE_COUNT = 10;
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -203,12 +204,24 @@ export function getPanelScript(): string {
       const selection = window.getSelection();
       if (!selection.rangeCount) return;
 
+      // 转换为相对于工作区的路径
+      let relativePath = path;
+      if (workspaceRoot && path.startsWith(workspaceRoot)) {
+        relativePath = path.substring(workspaceRoot.length);
+        // 移除开头的路径分隔符
+        if (relativePath.startsWith('\\\\') || relativePath.startsWith('/')) {
+          relativePath = relativePath.substring(1);
+        }
+        // 统一使用正斜杠
+        relativePath = relativePath.replace(/\\\\/g, '/');
+      }
+
       const range = selection.getRangeAt(0);
 
       const chip = document.createElement('span');
       chip.className = 'file-chip';
       chip.contentEditable = 'false';
-      chip.setAttribute('data-path', path);
+      chip.setAttribute('data-path', relativePath);
       chip.setAttribute('data-id', 'chip-' + (fileChipIdCounter++));
 
       const icon = document.createElement('span');
@@ -218,7 +231,7 @@ export function getPanelScript(): string {
       const nameSpan = document.createElement('span');
       nameSpan.className = 'chip-name';
       nameSpan.textContent = name;
-      nameSpan.title = path;
+      nameSpan.title = relativePath;
 
       const deleteBtn = document.createElement('span');
       deleteBtn.className = 'chip-delete';
@@ -362,6 +375,12 @@ export function getPanelScript(): string {
         if (typeof msg.timeoutMinutes === 'number' && msg.timeoutMinutes >= 0) {
           timeoutMinutes = msg.timeoutMinutes;
           timeoutInput.value = msg.timeoutMinutes;
+        }
+      } else if (msg.type === 'setWorkspaceRoot') {
+        // 接收工作区根目录
+        if (msg.workspaceRoot) {
+          workspaceRoot = msg.workspaceRoot;
+          console.log('[WindsurfChatOpen] Workspace root set to:', workspaceRoot);
         }
       }
     });
