@@ -159,6 +159,10 @@ export function getPanelScript(): string {
       e.preventDefault();
       inputText.classList.remove('drag-over');
 
+      // 保存拖放位置的坐标
+      const dropX = e.clientX;
+      const dropY = e.clientY;
+
       const items = e.dataTransfer?.items;
       if (!items || items.length === 0) return;
 
@@ -203,7 +207,8 @@ export function getPanelScript(): string {
               const isTextFile = isTextFileByName(name);
 
               if (isFolder || isTextFile) {
-                insertFileChip(name, filePath, isFolder);
+                // 使用拖放坐标插入芯片
+                insertFileChipAtPosition(name, filePath, isFolder, dropX, dropY);
               }
             }
           });
@@ -220,12 +225,24 @@ export function getPanelScript(): string {
       inputText.classList.remove('drag-over');
     });
 
-    // 在光标位置插入文件芯片
-    function insertFileChip(name, path, isFolder) {
-      const selection = window.getSelection();
-      if (!selection.rangeCount) return;
-
-      const range = selection.getRangeAt(0);
+    // 在指定位置插入文件芯片
+    function insertFileChipAtPosition(name, path, isFolder, x, y) {
+      // 根据鼠标坐标确定插入位置
+      let range;
+      if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(x, y);
+      } else if (document.caretPositionFromPoint) {
+        const position = document.caretPositionFromPoint(x, y);
+        range = document.createRange();
+        range.setStart(position.offsetNode, position.offset);
+      }
+      
+      if (!range) {
+        // 如果无法获取位置，使用当前光标位置
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+        range = selection.getRangeAt(0);
+      }
 
       const chip = document.createElement('span');
       chip.className = 'file-chip';
