@@ -13,6 +13,11 @@ export function getPanelScript(): string {
     const waitingIndicator = document.getElementById('waitingIndicator');
     const timeoutInput = document.getElementById('timeoutInput');
     const connectionStatus = document.getElementById('connectionStatus');
+    const devReqToggle = document.getElementById('devReqToggle');
+    const devReqContent = document.getElementById('devReqContent');
+    const devReqList = document.getElementById('devReqList');
+    const devReqInput = document.getElementById('devReqInput');
+    const devReqAddBtn = document.getElementById('devReqAddBtn');
     let images = [];
     let currentRequestId = '';
     let currentPort = 0;
@@ -22,6 +27,8 @@ export function getPanelScript(): string {
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
     let timeoutMinutes = 240; // 默认4小时
     let fileChipIdCounter = 0; // 用于生成唯一的 file-chip ID
+    
+    let devRequirements = []; // 开发要求列表 {id, text, checked}
 
     // ============ 工具函数 ============
 
@@ -131,6 +138,13 @@ export function getPanelScript(): string {
       // 从 contenteditable 中提取文本和文件路径
       let text = getTextWithFilePaths();
       const validImages = images.filter(img => img !== null);
+
+      // 追加选中的开发要求
+      const checkedRequirements = devRequirements.filter(req => req.checked);
+      if (checkedRequirements.length > 0) {
+        const reqText = '\\n\\n开发要求：\\n' + checkedRequirements.map(req => '- ' + req.text).join('\\n');
+        text = text ? text + reqText : reqText.trim();
+      }
 
       if (text || validImages.length > 0) {
         vscode.postMessage({
@@ -465,6 +479,103 @@ export function getPanelScript(): string {
       return '⏱️ ' + minutes + ':' + seconds.toString().padStart(2, '0');
     }
 
+    // ============ 开发要求功能 ============
+    
+    // 展开/收起开发要求
+    devReqToggle.addEventListener('click', () => {
+      devReqToggle.classList.toggle('collapsed');
+      devReqContent.classList.toggle('collapsed');
+    });
+    
+    // 添加开发要求
+    function addDevRequirement(text, checked = false) {
+      if (!text || !text.trim()) return;
+      
+      const id = Date.now() + Math.random();
+      const requirement = { id, text: text.trim(), checked };
+      devRequirements.push(requirement);
+      
+      renderDevRequirement(requirement);
+      saveDevRequirements();
+    }
+
+    // 渲染单个开发要求
+    function renderDevRequirement(req) {
+      const item = document.createElement('div');
+      item.className = 'dev-req-item';
+      item.setAttribute('data-id', req.id);
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.id = 'req-' + req.id;
+      checkbox.checked = req.checked;
+      checkbox.addEventListener('change', () => {
+        req.checked = checkbox.checked;
+        saveDevRequirements();
+      });
+      
+      const label = document.createElement('label');
+      label.htmlFor = 'req-' + req.id;
+      label.textContent = req.text;
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'dev-req-delete';
+      deleteBtn.textContent = '×';
+      deleteBtn.addEventListener('click', () => {
+        devRequirements = devRequirements.filter(r => r.id !== req.id);
+        item.remove();
+        saveDevRequirements();
+      });
+      
+      item.appendChild(checkbox);
+      item.appendChild(label);
+      item.appendChild(deleteBtn);
+      devReqList.appendChild(item);
+    }
+
+    // 渲染所有开发要求
+    function renderAllDevRequirements() {
+      devReqList.innerHTML = '';
+      devRequirements.forEach(req => renderDevRequirement(req));
+    }
+
+    // 保存开发要求到 VSCode 配置
+    function saveDevRequirements() {
+      vscode.postMessage({
+        type: 'saveDevRequirements',
+        requirements: devRequirements
+      });
+    }
+
+    // 加载开发要求
+    function loadDevRequirements(requirements) {
+      if (Array.isArray(requirements)) {
+        devRequirements = requirements;
+        renderAllDevRequirements();
+      }
+    }
+
+    // 添加按钮点击事件
+    devReqAddBtn.addEventListener('click', () => {
+      const text = devReqInput.value.trim();
+      if (text) {
+        addDevRequirement(text, false);
+        devReqInput.value = '';
+      }
+    });
+
+    // 输入框回车添加
+    devReqInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const text = devReqInput.value.trim();
+        if (text) {
+          addDevRequirement(text, false);
+          devReqInput.value = '';
+        }
+      }
+    });
+
     window.addEventListener('message', (e) => {
       const msg = e.data;
       if (msg.type === 'showPrompt') {
@@ -503,6 +614,11 @@ export function getPanelScript(): string {
         if (msg.workspaceRoot) {
           workspaceRoot = msg.workspaceRoot;
           console.log('[WindsurfChatOpen] Workspace root set to:', workspaceRoot);
+        }
+      } else if (msg.type === 'setDevRequirements') {
+        // 接收开发要求配置
+        if (msg.requirements) {
+          loadDevRequirements(msg.requirements);
         }
       }
     });

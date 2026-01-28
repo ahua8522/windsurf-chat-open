@@ -65,6 +65,21 @@ export function getPanelHtml(version: string = '0.0.0'): string {
   <div class="input-area">
     <div id="inputText" contenteditable="true" data-placeholder="输入反馈或指令...支持拖拽图片、文本文件和文件夹"></div>
     <div class="image-preview" id="imagePreview"></div>
+    
+    <div class="dev-requirements-section">
+      <div class="dev-requirements-header">
+        <span class="dev-requirements-title">📋 开发要求</span>
+        <div class="dev-requirements-header-actions">
+          <input type="text" id="devReqInput" placeholder="添加..." maxlength="100" />
+          <button id="devReqAddBtn" title="添加">+</button>
+          <button class="dev-requirements-toggle" id="devReqToggle" title="展开/收起">▼</button>
+        </div>
+      </div>
+      <div class="dev-requirements-content" id="devReqContent">
+        <div class="dev-requirements-list" id="devReqList"></div>
+      </div>
+    </div>
+    
     <div class="buttons">
       <button class="btn-primary" id="btnSubmit">提交 (Ctrl+Enter)</button>
       <button class="btn-danger" id="btnEnd">结束对话</button>

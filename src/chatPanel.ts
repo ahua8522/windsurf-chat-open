@@ -23,12 +23,13 @@ export interface UserResponse {
 }
 
 interface WebviewMessage {
-  type: 'ready' | 'continue' | 'end' | 'submit' | 'setTimeout' | 'getWorkspaceRoot';
+  type: 'ready' | 'continue' | 'end' | 'submit' | 'setTimeout' | 'getWorkspaceRoot' | 'saveDevRequirements';
   text?: string;
   images?: string[];
   files?: Array<{ name: string; path: string; size: number }>;
   requestId?: string;
   timeoutMinutes?: number;
+  requirements?: Array<{ id: number; text: string; checked: boolean }>;
 }
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
@@ -41,11 +42,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _isWebviewReady: boolean = false;
   private _currentRequestId?: string;
   private _timeoutMinutes: number = 240; // 默认4小时
+  private _context?: vscode.ExtensionContext;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
-    private readonly _version: string
+    private readonly _version: string,
+    context?: vscode.ExtensionContext
   ) {
+    this._context = context;
     this._resetViewReadyPromise();
   }
 
@@ -91,6 +95,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const workspaceRoot = workspaceFolders[0].uri.fsPath;
           this._view?.webview.postMessage({ type: 'setWorkspaceRoot', workspaceRoot });
         }
+        // 发送开发要求配置到前端
+        const devRequirements = this._context?.globalState.get('devRequirements', []);
+        this._view?.webview.postMessage({ type: 'setDevRequirements', requirements: devRequirements });
         break;
       case 'continue':
         this._onUserResponse.fire({ action: 'continue', text: '', images: [], requestId });
@@ -113,6 +120,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (folders && folders.length > 0) {
           const root = folders[0].uri.fsPath;
           this._view?.webview.postMessage({ type: 'setWorkspaceRoot', workspaceRoot: root });
+        }
+        break;
+      case 'saveDevRequirements':
+        // 保存开发要求配置
+        if (message.requirements && this._context) {
+          this._context.globalState.update('devRequirements', message.requirements);
+          console.log('[WindsurfChatOpen] Dev requirements saved:', message.requirements.length);
         }
         break;
     }
@@ -198,7 +212,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    const tempDir = os.tmpdir();
+    // 创建 windsurf-chat 文件夹
+    const tempDir = path.join(os.tmpdir(), 'windsurf-chat');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
     const uniqueId = crypto.randomBytes(4).toString('hex');
     const savedImages: string[] = [];
     const failedImages: number[] = [];

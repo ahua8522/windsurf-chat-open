@@ -21,7 +21,7 @@ class ExtensionStateManager {
 
   constructor(private context: vscode.ExtensionContext) {
     const version = context.extension.packageJSON.version || '0.0.0';
-    this.panelProvider = new ChatPanelProvider(context.extensionUri, version);
+    this.panelProvider = new ChatPanelProvider(context.extensionUri, version, context);
     this.httpService = new HttpService(
       context, 
       (data) => this.handleRequest(data),
@@ -127,16 +127,21 @@ class ExtensionStateManager {
   }
 
   private cleanOldTempFiles() {
-    const tempDir = os.tmpdir();
+    const windsurfChatDir = path.join(os.tmpdir(), 'windsurf-chat');
     const now = Date.now();
     const prefixes = ['wsc_img_', 'windsurf_chat_instruction_'];
 
     try {
-      const files = fs.readdirSync(tempDir);
+      // 如果 windsurf-chat 文件夹不存在，直接返回
+      if (!fs.existsSync(windsurfChatDir)) {
+        return;
+      }
+
+      const files = fs.readdirSync(windsurfChatDir);
       let count = 0;
       for (const file of files) {
         if (prefixes.some(p => file.startsWith(p))) {
-          const filePath = path.join(tempDir, file);
+          const filePath = path.join(windsurfChatDir, file);
           try {
             const stat = fs.statSync(filePath);
             if (now - stat.mtimeMs > TEMP_FILE_MAX_AGE_MS) {

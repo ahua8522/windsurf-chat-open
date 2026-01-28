@@ -314,15 +314,18 @@ export function getPanelStyles(): string {
       border: 1px solid var(--vscode-widget-border);
       border-radius: 4px;
       font-size: 12px;
-      overflow: hidden;
+      overflow-y: auto;
       max-height: 0;
       opacity: 0;
       transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
     }
     .config-bar.show {
       display: flex;
-      max-height: 200px;
+      max-height: 400px;
+      padding: 12px;
       opacity: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
     .config-bar-row {
       display: flex;
@@ -390,6 +393,141 @@ export function getPanelStyles(): string {
     }
     .confirm-config-btn:active {
       transform: translateY(1px);
+    }
+    .dev-requirements-section {
+      margin-top: 8px;
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 4px;
+      background: var(--vscode-input-background);
+      overflow: hidden;
+    }
+    .dev-requirements-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: var(--vscode-sideBar-background);
+      gap: 4px;
+    }
+    .dev-requirements-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--vscode-foreground);
+      flex-shrink: 0;
+    }
+    .dev-requirements-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex: 1;
+      max-width: 400px;
+    }
+    .dev-requirements-header-actions input {
+      flex: 1;
+      padding: 4px 8px;
+      border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35));
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border-radius: 3px;
+      font-size: 12px;
+      min-width: 0;
+    }
+    .dev-requirements-header-actions input:focus {
+      outline: 1px solid var(--vscode-focusBorder);
+    }
+    .dev-requirements-header-actions button {
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: 1px solid var(--vscode-button-border, transparent);
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.1s;
+      flex-shrink: 0;
+    }
+    .dev-requirements-header-actions button:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
+    .dev-requirements-toggle {
+      background: transparent !important;
+      border: none !important;
+      color: var(--vscode-foreground) !important;
+      font-size: 10px !important;
+      opacity: 0.7;
+      transition: transform 0.2s, opacity 0.1s;
+    }
+    .dev-requirements-toggle:hover {
+      opacity: 1 !important;
+      background: var(--vscode-list-hoverBackground) !important;
+    }
+    .dev-requirements-toggle.collapsed {
+      transform: rotate(-90deg);
+    }
+    .dev-requirements-content {
+      max-height: 200px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+      transition: max-height 0.3s ease, padding 0.3s ease;
+    }
+    .dev-requirements-content.collapsed {
+      max-height: 0;
+      padding: 0 8px;
+      overflow: hidden;
+    }
+    .dev-requirements-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .dev-req-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      background: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.35));
+      border-radius: 3px;
+      font-size: 12px;
+      transition: background 0.1s;
+    }
+    .dev-req-item:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .dev-req-item input[type="checkbox"] {
+      cursor: pointer;
+      width: 14px;
+      height: 14px;
+      margin: 0;
+    }
+    .dev-req-item label {
+      flex: 1;
+      cursor: pointer;
+      color: var(--vscode-foreground);
+      user-select: none;
+    }
+    .dev-req-item .dev-req-delete {
+      background: transparent;
+      border: none;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0 4px;
+      opacity: 0.5;
+      transition: opacity 0.1s, color 0.1s;
+    }
+    .dev-req-item .dev-req-delete:hover {
+      opacity: 1;
+      color: var(--vscode-errorForeground);
     }
   `;
 }
