@@ -171,7 +171,30 @@ export function getPanelScript(): string {
         chip.parentNode.replaceChild(textNode, chip);
       });
 
-      return clonedNode.textContent.trim();
+      // 将 <br> 和块级元素转换为换行符占位符（使用特殊标记避免被 textContent 处理）
+      const NEWLINE_MARKER = '___NEWLINE___';
+      const brs = clonedNode.querySelectorAll('br');
+      brs.forEach(br => {
+        br.replaceWith(NEWLINE_MARKER);
+      });
+      const divs = clonedNode.querySelectorAll('div, p');
+      divs.forEach(div => {
+        if (div.previousSibling) {
+          div.insertBefore(document.createTextNode(NEWLINE_MARKER), div.firstChild);
+        }
+      });
+
+      // 提取文本并将占位符替换为实际换行符
+      let text = clonedNode.textContent || '';
+      text = text.split(NEWLINE_MARKER).join('\\n');
+      
+      // 清理控制字符：移除 ANSI 转义序列和其他控制字符（保留换行和制表符）
+      text = text.replace(/\\x1b\\[[0-9;]*[a-zA-Z]/g, ''); // ANSI 转义序列
+      text = text.replace(/\\r/g, ''); // 回车符
+      text = text.replace(/[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f]/g, ''); // 其他控制字符
+      
+      text = text.replace(/\\n{3,}/g, '\\n\\n'); // 合并过多的换行
+      return text.trim();
     }
 
     // 获取纯文本内容（用于判断是否为空）
