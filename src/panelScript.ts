@@ -18,6 +18,13 @@ export function getPanelScript(): string {
     const devReqList = document.getElementById('devReqList');
     const devReqInput = document.getElementById('devReqInput');
     const devReqAddBtn = document.getElementById('devReqAddBtn');
+    const queueSection = document.getElementById('queueSection');
+    const queueList = document.getElementById('queueList');
+    const queueCount = document.getElementById('queueCount');
+    const queueClearBtn = document.getElementById('queueClearBtn');
+    const chatCountEl = document.getElementById('chatCount');
+    const chatCountResetBtn = document.getElementById('chatCountReset');
+    const btnEnd = document.getElementById('btnEnd');
     let images = [];
     let currentRequestId = '';
     let currentPort = 0;
@@ -25,10 +32,14 @@ export function getPanelScript(): string {
 
     const MAX_IMAGE_COUNT = 10;
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
-    let timeoutMinutes = 240; // 默认4小时
+    let timeoutMinutes = 0; // 默认不限制
     let fileChipIdCounter = 0; // 用于生成唯一的 file-chip ID
     
     let devRequirements = []; // 开发要求列表 {id, text, checked}
+    let messageQueue = []; // 消息队列
+    let isWaitingForInput = false; // 是否在等待用户输入
+    let chatCount = 0; // 对话次数
+    let autoDequeueTimer = null; // 自动出队定时器
 
     // ============ 工具函数 ============
 
@@ -117,8 +128,11 @@ export function getPanelScript(): string {
     });
 
     document.getElementById('btnSubmit').onclick = submit;
-    document.getElementById('btnEnd').onclick = () => {
+    btnEnd.onclick = () => {
       waitingIndicator.classList.remove('show');
+      isWaitingForInput = false;
+      btnEnd.classList.remove('show');
+      if (autoDequeueTimer) { clearTimeout(autoDequeueTimer); autoDequeueTimer = null; }
       vscode.postMessage({ type: 'end', requestId: currentRequestId });
     };
     document.getElementById('modalClose').onclick = closeModal;
@@ -133,20 +147,35 @@ export function getPanelScript(): string {
     }
 
     function submit() {
+      // 如果不在等待输入状态，添加到队列
+      if (!isWaitingForInput) {
+        addToQueue();
+        return;
+      }
+
+      // 取消自动出队定时器
+      if (autoDequeueTimer) {
+        clearTimeout(autoDequeueTimer);
+        autoDequeueTimer = null;
+      }
+
       waitingIndicator.classList.remove('show');
+      isWaitingForInput = false;
+      btnEnd.classList.remove('show');
 
       // 从 contenteditable 中提取文本和文件路径
       let text = getTextWithFilePaths();
       const validImages = images.filter(img => img !== null);
 
-      // 追加选中的开发要求
-      const checkedRequirements = devRequirements.filter(req => req.checked);
-      if (checkedRequirements.length > 0) {
-        const reqText = '\\n\\n开发要求：\\n' + checkedRequirements.map(req => '- ' + req.text).join('\\n');
-        text = text ? text + reqText : reqText.trim();
-      }
-
+      // 空值判断只看输入框数据（不含开发要求）
       if (text || validImages.length > 0) {
+        // 追加选中的开发要求
+        const checkedRequirements = devRequirements.filter(req => req.checked);
+        if (checkedRequirements.length > 0) {
+          const reqText = '\\n\\n开发要求：\\n' + checkedRequirements.map(req => '- ' + req.text).join('\\n');
+          text = text + reqText;
+        }
+
         vscode.postMessage({
           type: 'submit',
           text,
@@ -156,8 +185,10 @@ export function getPanelScript(): string {
         inputText.innerHTML = '';
         images = [];
         imagePreview.innerHTML = '';
+        incrementChatCount();
       } else {
         vscode.postMessage({ type: 'continue', requestId: currentRequestId });
+        incrementChatCount();
       }
     }
 
@@ -216,25 +247,241 @@ export function getPanelScript(): string {
       return inputText.textContent.trim();
     }
 
+    // ============ 消息队列功能 ============
+
+    function addToQueue() {
+      let text = getTextWithFilePaths();
+      const validImages = images.filter(img => img !== null);
+
+      // 空值判断只看输入框数据（不含开发要求）
+      if (!text && validImages.length === 0) return;
+
+      const checkedRequirements = devRequirements.filter(req => req.checked);
+      if (checkedRequirements.length > 0) {
+        const reqText = '\\n\\n开发要求：\\n' + checkedRequirements.map(req => '- ' + req.text).join('\\n');
+        text = text ? text + reqText : reqText.trim();
+      }
+
+      messageQueue.push({
+        id: Date.now() + Math.random(),
+        text,
+        images: validImages
+      });
+
+      inputText.innerHTML = '';
+      images = [];
+      imagePreview.innerHTML = '';
+      renderQueue();
+    }
+
+    let dragSrcIndex = -1;
+
+    function renderQueue() {
+      queueCount.textContent = messageQueue.length;
+
+      if (messageQueue.length === 0) {
+        queueSection.style.display = 'none';
+        return;
+      }
+
+      queueSection.style.display = 'block';
+      queueList.innerHTML = '';
+
+      messageQueue.forEach((item, index) => {
+        const el = document.createElement('div');
+        el.className = 'queue-item';
+        el.draggable = true;
+        el.setAttribute('data-index', index);
+
+        // 拖拽手柄
+        const handle = document.createElement('span');
+        handle.className = 'queue-drag-handle';
+        handle.textContent = '⠿';
+        handle.title = '拖拽排序';
+
+        const textEl = document.createElement('div');
+        textEl.className = 'queue-item-text';
+        const preview = item.text.length > 50 ? item.text.substring(0, 50) + '...' : item.text;
+        textEl.textContent = (item.images.length > 0 ? '🖼️' + item.images.length + ' ' : '') + (preview || '(空消息)');
+        textEl.title = item.text;
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'queue-item-edit';
+        editBtn.textContent = '✎';
+        editBtn.title = '编辑';
+        editBtn.onclick = (e) => {
+          e.stopPropagation();
+          // 回填文本到输入框
+          inputText.textContent = item.text.replace(new RegExp('\\\\n\\\\n开发要求：\\\\n[\\\\s\\\\S]*$'), '');
+          // 回填图片
+          if (item.images && item.images.length > 0) {
+            item.images.forEach(dataUrl => {
+              if (dataUrl) {
+                const imgIndex = images.length;
+                images.push(dataUrl);
+                const wrapper = document.createElement('div');
+                wrapper.className = 'img-wrapper';
+                const imgEl = document.createElement('img');
+                imgEl.src = dataUrl;
+                imgEl.onclick = () => showModal(dataUrl);
+                const delBtn = document.createElement('button');
+                delBtn.className = 'img-delete';
+                delBtn.textContent = '×';
+                delBtn.onclick = (ev) => { ev.stopPropagation(); removeImage(imgIndex, wrapper); };
+                wrapper.appendChild(imgEl);
+                wrapper.appendChild(delBtn);
+                imagePreview.appendChild(wrapper);
+              }
+            });
+          }
+          // 从队列移除
+          messageQueue.splice(index, 1);
+          renderQueue();
+          inputText.focus();
+        };
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'queue-item-delete';
+        deleteBtn.textContent = '×';
+        deleteBtn.title = '删除';
+        deleteBtn.onclick = (e) => {
+          e.stopPropagation();
+          messageQueue.splice(index, 1);
+          renderQueue();
+        };
+
+        el.addEventListener('dragstart', (e) => {
+          dragSrcIndex = index;
+          el.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', '' + index);
+        });
+        el.addEventListener('dragend', () => {
+          el.classList.remove('dragging');
+          dragSrcIndex = -1;
+          queueList.querySelectorAll('.queue-item').forEach(item => {
+            item.classList.remove('drag-over-above', 'drag-over-below');
+          });
+        });
+        el.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (dragSrcIndex === index) return;
+          const rect = el.getBoundingClientRect();
+          const midY = rect.top + rect.height / 2;
+          el.classList.remove('drag-over-above', 'drag-over-below');
+          if (e.clientY < midY) {
+            el.classList.add('drag-over-above');
+          } else {
+            el.classList.add('drag-over-below');
+          }
+        });
+        el.addEventListener('dragleave', () => {
+          el.classList.remove('drag-over-above', 'drag-over-below');
+        });
+        el.addEventListener('drop', (e) => {
+          e.preventDefault();
+          el.classList.remove('drag-over-above', 'drag-over-below');
+          if (dragSrcIndex < 0 || dragSrcIndex === index) return;
+          const rect = el.getBoundingClientRect();
+          const midY = rect.top + rect.height / 2;
+          const moved = messageQueue.splice(dragSrcIndex, 1)[0];
+          let targetIndex = e.clientY < midY ? index : index + 1;
+          if (dragSrcIndex < index) targetIndex--;
+          if (targetIndex < 0) targetIndex = 0;
+          messageQueue.splice(targetIndex, 0, moved);
+          dragSrcIndex = -1;
+          renderQueue();
+        });
+
+        el.appendChild(handle);
+        el.appendChild(textEl);
+        el.appendChild(editBtn);
+        el.appendChild(deleteBtn);
+        queueList.appendChild(el);
+      });
+    }
+
+    function dequeueAndSubmit() {
+      if (messageQueue.length === 0 || !isWaitingForInput) return;
+      const item = messageQueue.shift();
+      renderQueue();
+
+      waitingIndicator.classList.remove('show');
+      isWaitingForInput = false;
+
+      vscode.postMessage({
+        type: 'submit',
+        text: item.text,
+        images: item.images,
+        requestId: currentRequestId
+      });
+      incrementChatCount();
+    }
+
+    queueClearBtn.addEventListener('click', () => {
+      messageQueue = [];
+      renderQueue();
+    });
+
+    // ============ 对话次数记录 ============
+
+    function incrementChatCount() {
+      chatCount++;
+      chatCountEl.textContent = chatCount;
+      vscode.postMessage({ type: 'saveChatCount', count: chatCount });
+    }
+
+    chatCountResetBtn.addEventListener('click', () => {
+      chatCount = 0;
+      chatCountEl.textContent = '0';
+      vscode.postMessage({ type: 'saveChatCount', count: 0 });
+    });
+
     inputText.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && e.ctrlKey) {
         e.preventDefault();
         submit();
       } else if (e.key === 'Escape') {
         waitingIndicator.classList.remove('show');
+        isWaitingForInput = false;
+        btnEnd.classList.remove('show');
+        if (autoDequeueTimer) { clearTimeout(autoDequeueTimer); autoDequeueTimer = null; }
         vscode.postMessage({ type: 'end', requestId: currentRequestId });
       }
     });
 
     inputText.addEventListener('paste', (e) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          e.preventDefault();
-          const file = item.getAsFile();
-          if (file) addImage(file);
+      e.preventDefault();
+      const clipboardData = e.clipboardData;
+      if (!clipboardData) return;
+
+      let hasImage = false;
+      const items = clipboardData.items;
+      if (items) {
+        for (const item of items) {
+          if (item.type.startsWith('image/')) {
+            hasImage = true;
+            const file = item.getAsFile();
+            if (file) addImage(file);
+          }
+        }
+      }
+
+      if (!hasImage) {
+        const text = clipboardData.getData('text/plain');
+        if (text) {
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount > 0) {
+            const range = sel.getRangeAt(0);
+            range.deleteContents();
+            const textNode = document.createTextNode(text);
+            range.insertNode(textNode);
+            range.setStartAfter(textNode);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
         }
       }
     });
@@ -582,6 +829,8 @@ export function getPanelScript(): string {
         promptText.textContent = msg.prompt;
         currentRequestId = msg.requestId || '';
         waitingIndicator.classList.add('show');
+        isWaitingForInput = true;
+        btnEnd.classList.add('show');
         inputText.focus();
         if (msg.startTimer) {
           startCountdown();
@@ -596,6 +845,14 @@ export function getPanelScript(): string {
               }
             }, 1000);
           }
+        }
+        // 如果队列有消息，自动出队提交；队列为空时发送系统通知
+        if (messageQueue.length > 0) {
+          autoDequeueTimer = setTimeout(() => {
+            dequeueAndSubmit();
+          }, 800);
+        } else {
+          vscode.postMessage({ type: 'sendNotification' });
         }
       } else if (msg.type === 'setPort') {
         currentPort = msg.port;
@@ -619,6 +876,12 @@ export function getPanelScript(): string {
         // 接收开发要求配置
         if (msg.requirements) {
           loadDevRequirements(msg.requirements);
+        }
+      } else if (msg.type === 'setChatCount') {
+        // 接收对话次数
+        if (typeof msg.count === 'number') {
+          chatCount = msg.count;
+          chatCountEl.textContent = chatCount;
         }
       }
     });

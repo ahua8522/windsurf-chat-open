@@ -216,9 +216,6 @@ export class HttpService {
                         );
                     }
 
-                    // 发送系统通知
-                    this.sendSystemNotification(data.prompt, requestId);
-
                     // Clear any existing request with same ID, sending cancellation response
                     this.clearPendingRequest(requestId, true, this.createErrorResponse(ERROR_MESSAGES.REQUEST_SUPERSEDED));
 

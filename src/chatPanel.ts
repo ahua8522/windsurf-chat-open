@@ -12,6 +12,7 @@ import {
   MAX_IMAGE_SIZE
 } from './constants';
 import { getPanelHtml } from './panelTemplate';
+import notifier from 'node-notifier';
 
 export interface UserResponse {
   action: 'continue' | 'end' | 'instruction' | 'error';
@@ -23,13 +24,14 @@ export interface UserResponse {
 }
 
 interface WebviewMessage {
-  type: 'ready' | 'continue' | 'end' | 'submit' | 'setTimeout' | 'getWorkspaceRoot' | 'saveDevRequirements';
+  type: 'ready' | 'continue' | 'end' | 'submit' | 'setTimeout' | 'getWorkspaceRoot' | 'saveDevRequirements' | 'saveChatCount' | 'sendNotification';
   text?: string;
   images?: string[];
   files?: Array<{ name: string; path: string; size: number }>;
   requestId?: string;
   timeoutMinutes?: number;
   requirements?: Array<{ id: number; text: string; checked: boolean }>;
+  count?: number;
 }
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
@@ -41,7 +43,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _viewReadyPromise?: Promise<void>;
   private _isWebviewReady: boolean = false;
   private _currentRequestId?: string;
-  private _timeoutMinutes: number = 240; // 默认4小时
+  private _timeoutMinutes: number = 0; // 默认不限制
   private _context?: vscode.ExtensionContext;
 
   constructor(
@@ -98,6 +100,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // 发送开发要求配置到前端
         const devRequirements = this._context?.globalState.get('devRequirements', []);
         this._view?.webview.postMessage({ type: 'setDevRequirements', requirements: devRequirements });
+        // 发送对话次数到前端
+        const chatCount = this._context?.globalState.get('chatCount', 0);
+        this._view?.webview.postMessage({ type: 'setChatCount', count: chatCount });
         break;
       case 'continue':
         this._onUserResponse.fire({ action: 'continue', text: '', images: [], requestId });
@@ -128,6 +133,23 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           this._context.globalState.update('devRequirements', message.requirements);
           console.log('[WindsurfChatOpen] Dev requirements saved:', message.requirements.length);
         }
+        break;
+      case 'saveChatCount':
+        if (typeof message.count === 'number' && this._context) {
+          this._context.globalState.update('chatCount', message.count);
+        }
+        break;
+      case 'sendNotification':
+        notifier.notify({
+          title: 'WindsurfChat Open',
+          message: 'AI 已完成任务，等待您的下一步指令',
+          sound: true,
+          wait: false
+        }, (err) => {
+          if (err) {
+            console.error(`[WindsurfChatOpen] 系统通知发送失败: ${err}`);
+          }
+        });
         break;
     }
   }
