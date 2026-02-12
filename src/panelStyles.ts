@@ -166,7 +166,7 @@ export function getPanelStyles(): string {
     }
     .config-bar.show {
       display: flex;
-      max-height: 300px;
+      max-height: 500px;
       padding: 10px 12px;
       opacity: 1;
       overflow: visible;
@@ -181,12 +181,14 @@ export function getPanelStyles(): string {
       font-weight: 600;
       color: var(--vscode-foreground);
       flex-shrink: 0;
+      min-width: 50px;
     }
     .config-input-group {
       display: flex;
       align-items: center;
       gap: 6px;
       flex: 1;
+      flex-wrap: wrap;
     }
     .config-input-group input {
       width: 64px;
@@ -210,11 +212,6 @@ export function getPanelStyles(): string {
       font-size: 10px;
       color: var(--vscode-descriptionForeground);
       opacity: 0.6;
-    }
-    .timeout-presets {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
     }
     .timeout-preset-btn {
       padding: 3px 10px;
@@ -252,6 +249,64 @@ export function getPanelStyles(): string {
     }
     .confirm-config-btn:active {
       transform: scale(0.97);
+    }
+    .config-divider {
+      height: 1px;
+      background: var(--vscode-widget-border, rgba(128,128,128,0.2));
+      margin: 2px 0;
+    }
+    .config-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--vscode-foreground);
+      opacity: 0.8;
+    }
+
+    /* ========== Optimize Button ========== */
+    .input-actions-left {
+      position: absolute;
+      bottom: 8px;
+      left: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 2;
+    }
+    .btn-optimize {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      background: rgba(128,128,128,0.12);
+      color: var(--vscode-descriptionForeground, #888);
+      opacity: 0.5;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+    .btn-optimize:hover {
+      opacity: 1;
+      background: rgba(255,180,0,0.15);
+      color: #f0b000;
+      box-shadow: 0 2px 8px rgba(255,180,0,0.2);
+      transform: scale(1.08);
+    }
+    .btn-optimize:active {
+      transform: scale(0.93);
+    }
+    .btn-optimize.loading {
+      opacity: 1;
+      animation: optimize-spin 1s linear infinite;
+      pointer-events: none;
+      color: #f0b000;
+    }
+    @keyframes optimize-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
 
     /* ========== Waiting Indicator ========== */
@@ -443,7 +498,7 @@ export function getPanelStyles(): string {
       width: 100%;
       min-height: 112px;
       max-height: 280px;
-      padding: 10px 42px 10px 10px;
+      padding: 10px 12px 40px 12px;
       border: 1px solid var(--vscode-input-border, rgba(128,128,128,0.35));
       background: var(--vscode-input-background);
       color: var(--vscode-input-foreground);
@@ -835,6 +890,45 @@ export function getPanelStyles(): string {
     .dev-req-item .dev-req-delete:hover {
       opacity: 1;
       color: var(--vscode-errorForeground);
+    }
+
+    /* ========== Toast ========== */
+    .toast-container {
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--vscode-editorWidget-foreground, #ccc);
+      background: var(--vscode-editorWidget-background, #333);
+      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.3));
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      opacity: 0;
+      transform: translateY(-8px);
+      animation: toast-in 0.2s ease forwards;
+      pointer-events: auto;
+      max-width: 300px;
+      word-break: break-word;
+    }
+    .toast.error {
+      border-color: var(--vscode-inputValidation-errorBorder, #f44);
+      background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+    }
+    @keyframes toast-in {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes toast-out {
+      to { opacity: 0; transform: translateY(-8px); }
     }
   `;
 }

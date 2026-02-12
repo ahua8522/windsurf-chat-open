@@ -44,15 +44,32 @@ export function getPanelHtml(version: string = '0.0.0'): string {
       <div class="config-input-group">
         <input type="number" id="timeoutInput" min="0" step="1" value="0" />
         <span class="config-unit">分钟</span>
-        <span class="hint-text">0 = 不限制</span>
+        <button class="timeout-preset-btn" data-minutes="0">不限制</button>
+        <button class="timeout-preset-btn" data-minutes="30">30m</button>
+        <button class="timeout-preset-btn" data-minutes="60">1h</button>
+        <button class="timeout-preset-btn" data-minutes="240">4h</button>
+        <button class="timeout-preset-btn" data-minutes="480">8h</button>
       </div>
     </div>
-    <div class="timeout-presets">
-      <button class="timeout-preset-btn" data-minutes="0">不限制</button>
-      <button class="timeout-preset-btn" data-minutes="30">30m</button>
-      <button class="timeout-preset-btn" data-minutes="60">1h</button>
-      <button class="timeout-preset-btn" data-minutes="240">4h</button>
-      <button class="timeout-preset-btn" data-minutes="480">8h</button>
+    <div class="config-divider"></div>
+    <div class="config-section-title">🤖 提示词优化 (AI)</div>
+    <div class="config-bar-row">
+      <label for="llmBaseUrl">API地址</label>
+      <div class="config-input-group">
+        <input type="text" id="llmBaseUrl" placeholder="https://api.openai.com/v1" style="width:100%;text-align:left;" />
+      </div>
+    </div>
+    <div class="config-bar-row">
+      <label for="llmApiKey">API Key</label>
+      <div class="config-input-group">
+        <input type="password" id="llmApiKey" placeholder="sk-..." style="width:100%;text-align:left;" />
+      </div>
+    </div>
+    <div class="config-bar-row">
+      <label for="llmModel">模型</label>
+      <div class="config-input-group">
+        <input type="text" id="llmModel" placeholder="gpt-4o-mini" value="gpt-4o-mini" style="width:100%;text-align:left;" />
+      </div>
     </div>
     <button id="confirmConfigBtn" class="confirm-config-btn">保存设置</button>
   </div>
@@ -77,6 +94,9 @@ export function getPanelHtml(version: string = '0.0.0'): string {
   <div class="input-area">
     <div class="input-container">
       <div id="inputText" contenteditable="true" data-placeholder="输入反馈或指令...支持拖拽图片、文本文件和文件夹"></div>
+      <div class="input-actions-left">
+        <button class="btn-optimize" id="btnOptimize" title="AI 优化提示词"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l1.5 4.5L14 8l-4.5 1.5L8 14l-1.5-4.5L2 8l4.5-1.5z"/></svg></button>
+      </div>
       <div class="input-actions">
         <button class="btn-end" id="btnEnd" title="结束对话 (Esc)"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="2"/></svg></button>
         <button class="btn-send" id="btnSubmit" title="提交 (Ctrl+Enter)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="12" x2="8" y2="4"/><polyline points="4,7 8,3 12,7"/></svg></button>
@@ -101,6 +121,8 @@ export function getPanelHtml(version: string = '0.0.0'): string {
     <div class="hint">Ctrl+Enter 提交 | Esc 结束 | 支持拖拽文件、图片到输入框</div>
   </div>
   
+  <div class="toast-container" id="toastContainer"></div>
+
   <div class="modal" id="imageModal">
     <button class="modal-close" id="modalClose">×</button>
     <img id="modalImage" src="" alt="preview">

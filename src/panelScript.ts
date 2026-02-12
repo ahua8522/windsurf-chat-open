@@ -25,6 +25,10 @@ export function getPanelScript(): string {
     const chatCountEl = document.getElementById('chatCount');
     const chatCountResetBtn = document.getElementById('chatCountReset');
     const btnEnd = document.getElementById('btnEnd');
+    const btnOptimize = document.getElementById('btnOptimize');
+    const llmBaseUrlInput = document.getElementById('llmBaseUrl');
+    const llmApiKeyInput = document.getElementById('llmApiKey');
+    const llmModelInput = document.getElementById('llmModel');
     let images = [];
     let currentRequestId = '';
     let currentPort = 0;
@@ -34,6 +38,7 @@ export function getPanelScript(): string {
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
     let timeoutMinutes = 0; // 默认不限制
     let fileChipIdCounter = 0; // 用于生成唯一的 file-chip ID
+    let isOptimizing = false; // 是否正在优化提示词
     
     let devRequirements = []; // 开发要求列表 {id, text, checked}
     let messageQueue = []; // 消息队列
@@ -42,6 +47,18 @@ export function getPanelScript(): string {
     let autoDequeueTimer = null; // 自动出队定时器
 
     // ============ 工具函数 ============
+
+    const toastContainer = document.getElementById('toastContainer');
+    function showToast(message, isError) {
+      const el = document.createElement('div');
+      el.className = 'toast' + (isError ? ' error' : '');
+      el.textContent = message;
+      toastContainer.appendChild(el);
+      setTimeout(() => {
+        el.style.animation = 'toast-out 0.2s ease forwards';
+        setTimeout(() => el.remove(), 200);
+      }, 3000);
+    }
 
     /**
      * 将 file:// URI 转换为本地文件路径
@@ -121,10 +138,19 @@ export function getPanelScript(): string {
         timeoutMinutes = value;
         vscode.postMessage({ type: 'setTimeout', timeoutMinutes: value });
         updateCountdownForNewTimeout();
-        // 收起配置栏
-        settingsToggle.classList.remove('expanded');
-        configBar.classList.remove('show');
       }
+      // 保存 LLM 配置
+      vscode.postMessage({
+        type: 'saveLlmConfig',
+        llmConfig: {
+          baseUrl: llmBaseUrlInput.value.trim(),
+          apiKey: llmApiKeyInput.value.trim(),
+          model: llmModelInput.value.trim() || 'gpt-4o-mini'
+        }
+      });
+      // 收起配置栏
+      settingsToggle.classList.remove('expanded');
+      configBar.classList.remove('show');
     });
 
     document.getElementById('btnSubmit').onclick = submit;
@@ -135,6 +161,16 @@ export function getPanelScript(): string {
       if (autoDequeueTimer) { clearTimeout(autoDequeueTimer); autoDequeueTimer = null; }
       vscode.postMessage({ type: 'end', requestId: currentRequestId });
     };
+    // 优化按钮
+    btnOptimize.onclick = () => {
+      if (isOptimizing) return;
+      const text = getPlainText();
+      if (!text) return;
+      isOptimizing = true;
+      btnOptimize.classList.add('loading');
+      vscode.postMessage({ type: 'optimizePrompt', text: text });
+    };
+
     document.getElementById('modalClose').onclick = closeModal;
     imageModal.onclick = (e) => { if (e.target === imageModal) closeModal(); };
 
@@ -621,13 +657,13 @@ export function getPanelScript(): string {
     function addImage(file) {
       // 检查图片数量限制
       if (images.filter(img => img !== null).length >= MAX_IMAGE_COUNT) {
-        alert('图片数量超过限制（最多 ' + MAX_IMAGE_COUNT + ' 张）');
+        showToast('图片数量超过限制（最多 ' + MAX_IMAGE_COUNT + ' 张）', true);
         return;
       }
 
       // 检查图片大小限制
       if (file.size > MAX_IMAGE_SIZE) {
-        alert('图片大小超过限制（单张最大 5MB）');
+        showToast('图片大小超过限制（单张最大 5MB）', true);
         return;
       }
 
@@ -882,6 +918,21 @@ export function getPanelScript(): string {
         if (typeof msg.count === 'number') {
           chatCount = msg.count;
           chatCountEl.textContent = chatCount;
+        }
+      } else if (msg.type === 'optimizeResult') {
+        isOptimizing = false;
+        btnOptimize.classList.remove('loading');
+        if (msg.success && msg.text) {
+          inputText.textContent = msg.text;
+          inputText.focus();
+        } else if (msg.error) {
+          showToast('优化失败: ' + msg.error, true);
+        }
+      } else if (msg.type === 'setLlmConfig') {
+        if (msg.llmConfig) {
+          if (msg.llmConfig.baseUrl) llmBaseUrlInput.value = msg.llmConfig.baseUrl;
+          if (msg.llmConfig.apiKey) llmApiKeyInput.value = msg.llmConfig.apiKey;
+          if (msg.llmConfig.model) llmModelInput.value = msg.llmConfig.model;
         }
       }
     });

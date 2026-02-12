@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
+import * as https from 'https';
+import * as http from 'http';
 import {
   WEBVIEW_READY_TIMEOUT_MS,
   LONG_TEXT_THRESHOLD,
@@ -24,7 +26,7 @@ export interface UserResponse {
 }
 
 interface WebviewMessage {
-  type: 'ready' | 'continue' | 'end' | 'submit' | 'setTimeout' | 'getWorkspaceRoot' | 'saveDevRequirements' | 'saveChatCount' | 'sendNotification';
+  type: 'ready' | 'continue' | 'end' | 'submit' | 'setTimeout' | 'getWorkspaceRoot' | 'saveDevRequirements' | 'saveChatCount' | 'sendNotification' | 'saveLlmConfig' | 'optimizePrompt';
   text?: string;
   images?: string[];
   files?: Array<{ name: string; path: string; size: number }>;
@@ -32,6 +34,7 @@ interface WebviewMessage {
   timeoutMinutes?: number;
   requirements?: Array<{ id: number; text: string; checked: boolean }>;
   count?: number;
+  llmConfig?: { baseUrl: string; apiKey: string; model: string };
 }
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
@@ -103,6 +106,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // 发送对话次数到前端
         const chatCount = this._context?.globalState.get('chatCount', 0);
         this._view?.webview.postMessage({ type: 'setChatCount', count: chatCount });
+        // 发送 LLM 配置到前端
+        const llmConfig = this._context?.globalState.get('llmConfig', {});
+        this._view?.webview.postMessage({ type: 'setLlmConfig', llmConfig });
         break;
       case 'continue':
         this._onUserResponse.fire({ action: 'continue', text: '', images: [], requestId });
@@ -150,6 +156,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             console.error(`[WindsurfChatOpen] 系统通知发送失败: ${err}`);
           }
         });
+        break;
+      case 'saveLlmConfig':
+        if (message.llmConfig && this._context) {
+          this._context.globalState.update('llmConfig', message.llmConfig);
+          console.log('[WindsurfChatOpen] LLM config saved');
+        }
+        break;
+      case 'optimizePrompt':
+        this._optimizeWithLlm(message.text || '');
         break;
     }
   }
@@ -215,6 +230,84 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+
+  private async _optimizeWithLlm(text: string) {
+    const llmConfig = this._context?.globalState.get<{ baseUrl: string; apiKey: string; model: string }>('llmConfig');
+    if (!llmConfig || !llmConfig.apiKey) {
+      this._view?.webview.postMessage({ type: 'optimizeResult', success: false, error: '请先在设置中配置 API Key' });
+      return;
+    }
+
+    let baseUrl = (llmConfig.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    const model = llmConfig.model || 'gpt-4o-mini';
+    const apiKey = llmConfig.apiKey;
+
+    // 智能拼接：如果 baseUrl 已包含 /chat/completions 则不再追加
+    const endpoint = baseUrl.endsWith('/chat/completions') ? baseUrl : baseUrl + '/chat/completions';
+
+    const systemPrompt = '你是一个提示词优化专家。用户会给你一段发给 AI 编程助手的指令，请优化这段指令使其更清晰、结构化、易于 AI 理解和执行。要求：\n1. 保持用户原意不变\n2. 使指令更具体、条理清晰\n3. 如果指令较短，适当补充细节\n4. 直接输出优化后的指令文本，不要添加任何解释或前缀\n5. 使用与原文相同的语言';
+
+    const requestBody = JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: text }
+      ],
+      temperature: 0.7,
+      max_tokens: 2048
+    });
+
+    try {
+      const url = new URL(endpoint);
+      console.log(`[WindsurfChatOpen] LLM optimize request: ${url.href}, model: ${model}`);
+      const isHttps = url.protocol === 'https:';
+      const httpModule = isHttps ? https : http;
+
+      const result = await new Promise<string>((resolve, reject) => {
+        const req = httpModule.request({
+          hostname: url.hostname,
+          port: url.port || (isHttps ? 443 : 80),
+          path: url.pathname + url.search,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          timeout: 30000
+        }, (res) => {
+          let data = '';
+          res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+          res.on('end', () => {
+            try {
+              const json = JSON.parse(data);
+              if (json.error) {
+                reject(new Error(json.error.message || JSON.stringify(json.error)));
+                return;
+              }
+              const content = json.choices?.[0]?.message?.content;
+              if (content) {
+                resolve(content.trim());
+              } else {
+                reject(new Error('API 返回数据格式异常'));
+              }
+            } catch (e) {
+              reject(new Error(`解析响应失败: ${data.substring(0, 200)}`));
+            }
+          });
+        });
+
+        req.on('error', (e: Error) => reject(e));
+        req.on('timeout', () => { req.destroy(); reject(new Error('请求超时')); });
+        req.write(requestBody);
+        req.end();
+      });
+
+      this._view?.webview.postMessage({ type: 'optimizeResult', success: true, text: result });
+    } catch (e: any) {
+      console.error('[WindsurfChatOpen] LLM optimize failed:', e);
+      this._view?.webview.postMessage({ type: 'optimizeResult', success: false, error: e.message || String(e) });
+    }
+  }
 
   setPort(port: number) {
     this._port = port;
