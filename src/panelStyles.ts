@@ -930,6 +930,92 @@ export function getPanelStyles(): string {
     @keyframes toast-out {
       to { opacity: 0; transform: translateY(-8px); }
     }
+
+    /* ========== Project Select Dialog ========== */
+    .project-select-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+    .project-select-overlay.show {
+      display: flex;
+    }
+    .project-select-dialog {
+      background: var(--vscode-editorWidget-background, #252526);
+      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.3));
+      border-radius: 8px;
+      padding: 14px;
+      min-width: 200px;
+      max-width: 300px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .project-select-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--vscode-foreground);
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .project-select-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .project-select-item {
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.2));
+      background: transparent;
+      color: var(--vscode-foreground);
+      font-size: 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+    }
+    .project-select-item:hover {
+      background: var(--vscode-list-hoverBackground);
+      border-color: var(--vscode-focusBorder);
+    }
+    .project-select-item:active {
+      transform: scale(0.98);
+    }
+    .project-select-cancel {
+      margin-top: 10px;
+      width: 100%;
+      padding: 6px;
+      border-radius: 6px;
+      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.2));
+      background: transparent;
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .project-select-cancel:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .project-select-confirm {
+      margin-top: 8px;
+      width: 100%;
+      padding: 7px;
+      border-radius: 6px;
+      border: none;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .project-select-confirm:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
   `;
 }
 

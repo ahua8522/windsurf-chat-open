@@ -35,6 +35,7 @@ interface WebviewMessage {
   requirements?: Array<{ id: number; text: string; checked: boolean }>;
   count?: number;
   llmConfig?: { baseUrl: string; apiKey: string; model: string };
+  projectIndices?: number[];
 }
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
@@ -164,7 +165,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
         break;
       case 'optimizePrompt':
-        this._optimizeWithLlm(message.text || '');
+        this._optimizeWithLlm(message.text || '', message.projectIndices);
         break;
     }
   }
@@ -231,12 +232,148 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
 
-  private async _optimizeWithLlm(text: string) {
+  private _getProjectInfo(rootPath: string): string[] {
+    const info: string[] = [];
+    const projectName = path.basename(rootPath);
+    info.push(`项目: ${projectName}`);
+
+    // 读取 package.json 获取技术栈
+    try {
+      const pkgPath = path.join(rootPath, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        const deps = Object.keys(pkg.dependencies || {});
+        const devDeps = Object.keys(pkg.devDependencies || {});
+        if (pkg.description) { info.push(`  描述: ${pkg.description}`); }
+        if (deps.length > 0) { info.push(`  依赖: ${deps.join(', ')}`); }
+        if (devDeps.length > 0) { info.push(`  开发依赖: ${devDeps.join(', ')}`); }
+      }
+    } catch { /* ignore */ }
+
+    // 读取 requirements.txt 判断 Python 项目
+    try {
+      const reqPath = path.join(rootPath, 'requirements.txt');
+      if (fs.existsSync(reqPath)) {
+        const content = fs.readFileSync(reqPath, 'utf-8').split('\n').filter(l => l.trim() && !l.startsWith('#')).slice(0, 20);
+        info.push(`  Python依赖: ${content.join(', ')}`);
+      }
+    } catch { /* ignore */ }
+
+    // 顶层目录结构（最多15项）
+    try {
+      const entries = fs.readdirSync(rootPath, { withFileTypes: true })
+        .filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== '__pycache__' && e.name !== 'dist' && e.name !== 'build')
+        .slice(0, 15)
+        .map(e => e.isDirectory() ? `${e.name}/` : e.name);
+      if (entries.length > 0) { info.push(`  顶层结构: ${entries.join(', ')}`); }
+    } catch { /* ignore */ }
+
+    return info;
+  }
+
+  private async _getWorkspaceContext(targetFolder?: vscode.WorkspaceFolder, targetFolders?: vscode.WorkspaceFolder[]): Promise<string> {
+    const parts: string[] = [];
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+      return '';
+    }
+
+    // 当前打开的文件
+    const activeEditor = vscode.window.activeTextEditor;
+    if (activeEditor) {
+      const filePath = vscode.workspace.asRelativePath(activeEditor.document.uri);
+      const lang = activeEditor.document.languageId;
+      parts.push(`当前打开文件: ${filePath} (${lang})`);
+    }
+
+    // 确定目标项目列表
+    let folders: vscode.WorkspaceFolder[] = [];
+    if (targetFolders && targetFolders.length > 0) {
+      folders = targetFolders;
+    } else if (targetFolder) {
+      folders = [targetFolder];
+    } else {
+      // 自动判断
+      let autoFolder: vscode.WorkspaceFolder | undefined;
+      if (activeEditor) {
+        autoFolder = vscode.workspace.getWorkspaceFolder(activeEditor.document.uri);
+      }
+      if (!autoFolder) {
+        autoFolder = workspaceFolders[0];
+      }
+      folders = [autoFolder];
+    }
+
+    // 不关联任何项目（targetFolders 为空数组）
+    if (targetFolders && targetFolders.length === 0) {
+      return parts.join('\n');
+    }
+
+    // 收集所有目标项目的详细信息
+    const targetPaths = new Set(folders.map(f => f.uri.fsPath));
+    for (const folder of folders) {
+      const projectInfo = this._getProjectInfo(folder.uri.fsPath);
+      parts.push(`\n【目标项目】`);
+      parts.push(...projectInfo);
+      this._saveProjectContext(folder.uri.fsPath, projectInfo);
+    }
+
+    // 其他项目简要信息
+    if (workspaceFolders.length > 1) {
+      const otherFolders = workspaceFolders.filter(f => !targetPaths.has(f.uri.fsPath));
+      if (otherFolders.length > 0) {
+        parts.push(`\n【工作区其他项目】`);
+        for (const folder of otherFolders) {
+          parts.push(`- ${path.basename(folder.uri.fsPath)}`);
+        }
+      }
+    }
+
+    return parts.join('\n');
+  }
+
+  private _saveProjectContext(rootPath: string, projectInfo: string[]) {
+    try {
+      const contextDir = path.join(rootPath, '.windsurfchatopen');
+      if (!fs.existsSync(contextDir)) {
+        fs.mkdirSync(contextDir, { recursive: true });
+      }
+      const contextFile = path.join(contextDir, 'project-context.json');
+      const data = {
+        updatedAt: new Date().toISOString(),
+        projectName: path.basename(rootPath),
+        context: projectInfo
+      };
+      fs.writeFileSync(contextFile, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (e) {
+      console.error('[WindsurfChatOpen] Failed to save project context:', e);
+    }
+  }
+
+  private async _optimizeWithLlm(text: string, projectIndices?: number[]) {
     const llmConfig = this._context?.globalState.get<{ baseUrl: string; apiKey: string; model: string }>('llmConfig');
     if (!llmConfig || !llmConfig.apiKey) {
       this._view?.webview.postMessage({ type: 'optimizeResult', success: false, error: '请先在设置中配置 API Key' });
       return;
     }
+
+    // 多项目选择逻辑
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 1 && projectIndices === undefined) {
+      // 返回项目列表让前端选择（支持多选和不选）
+      const projects = workspaceFolders.map((f, i) => ({ index: i, name: path.basename(f.uri.fsPath) }));
+      this._view?.webview.postMessage({ type: 'selectProject', projects, text });
+      return;
+    }
+
+    // 确定目标项目（可能多个或为空数组表示不关联）
+    let targetFolders: vscode.WorkspaceFolder[] = [];
+    if (projectIndices && projectIndices.length > 0 && workspaceFolders) {
+      targetFolders = projectIndices.map(i => workspaceFolders[i]).filter(Boolean);
+    } else if (!projectIndices && workspaceFolders && workspaceFolders.length === 1) {
+      targetFolders = [workspaceFolders[0]];
+    }
+    // projectIndices 为空数组 [] 表示不关联任何项目
 
     let baseUrl = (llmConfig.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
     const model = llmConfig.model || 'gpt-4o-mini';
@@ -245,7 +382,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // 智能拼接：如果 baseUrl 已包含 /chat/completions 则不再追加
     const endpoint = baseUrl.endsWith('/chat/completions') ? baseUrl : baseUrl + '/chat/completions';
 
-    const systemPrompt = '你是一个提示词优化专家。用户会给你一段发给 AI 编程助手的指令，请优化这段指令使其更清晰、结构化、易于 AI 理解和执行。要求：\n1. 保持用户原意不变\n2. 使指令更具体、条理清晰\n3. 如果指令较短，适当补充细节\n4. 直接输出优化后的指令文本，不要添加任何解释或前缀\n5. 使用与原文相同的语言';
+    // 收集指定项目的上下文
+    const workspaceContext = await this._getWorkspaceContext(undefined, targetFolders);
+    let systemPrompt = '你是一个提示词优化专家。用户会给你一段发给 AI 编程助手的指令，请优化这段指令使其更清晰、结构化、易于 AI 理解和执行。要求：\n1. 保持用户原意不变\n2. 使指令更具体、条理清晰\n3. 如果指令较短，适当补充细节\n4. 直接输出优化后的指令文本，不要添加任何解释或前缀\n5. 使用与原文相同的语言\n6. 结合项目上下文，使指令更贴合当前项目的技术栈和架构';
+    if (workspaceContext) {
+      systemPrompt += '\n\n以下是当前项目的上下文信息，请结合这些信息优化指令：\n' + workspaceContext;
+    }
 
     const requestBody = JSON.stringify({
       model,
@@ -256,6 +398,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       temperature: 0.7,
       max_tokens: 2048
     });
+
+    console.log(`[WindsurfChatOpen] LLM optimize - System Prompt:\n${systemPrompt}`);
+    console.log(`[WindsurfChatOpen] LLM optimize - User Prompt:\n${text}`);
 
     try {
       const url = new URL(endpoint);

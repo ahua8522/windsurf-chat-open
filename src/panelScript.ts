@@ -934,6 +934,45 @@ export function getPanelScript(): string {
           if (msg.llmConfig.apiKey) llmApiKeyInput.value = msg.llmConfig.apiKey;
           if (msg.llmConfig.model) llmModelInput.value = msg.llmConfig.model;
         }
+      } else if (msg.type === 'selectProject') {
+        // 多项目时弹框让用户选择（支持多选和不选）
+        const overlay = document.getElementById('projectSelectOverlay');
+        const list = document.getElementById('projectSelectList');
+        list.innerHTML = '';
+        var selectedIndices = {};
+        msg.projects.forEach(function(p) {
+          var item = document.createElement('label');
+          item.className = 'project-select-item';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.style.marginRight = '8px';
+          cb.onchange = function() {
+            if (cb.checked) { selectedIndices[p.index] = true; }
+            else { delete selectedIndices[p.index]; }
+          };
+          item.appendChild(cb);
+          item.appendChild(document.createTextNode(p.name));
+          list.appendChild(item);
+        });
+        // 确认按钮
+        var confirmBtn = document.createElement('button');
+        confirmBtn.className = 'project-select-confirm';
+        confirmBtn.textContent = '确认优化';
+        confirmBtn.onclick = function() {
+          overlay.classList.remove('show');
+          isOptimizing = true;
+          btnOptimize.classList.add('loading');
+          var indices = Object.keys(selectedIndices).map(function(k) { return parseInt(k); });
+          vscode.postMessage({ type: 'optimizePrompt', text: msg.text, projectIndices: indices });
+        };
+        list.appendChild(confirmBtn);
+        overlay.classList.add('show');
+        // 取消按钮
+        document.getElementById('projectSelectCancel').onclick = function() {
+          overlay.classList.remove('show');
+          isOptimizing = false;
+          btnOptimize.classList.remove('loading');
+        };
       }
     });
 

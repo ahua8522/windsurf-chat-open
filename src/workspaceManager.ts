@@ -46,6 +46,9 @@ export class WorkspaceManager {
             // Update .gitignore
             this.updateGitignore(workspacePath);
 
+            // Generate project overview md (skip if already exists)
+            this.generateProjectOverview(workspacePath, localDir);
+
             console.log(`[WindsurfChatOpen] Workspace setup complete for: ${localDir}`);
         }
 
@@ -129,5 +132,87 @@ node "${scriptPath}" "Task completion reason"
 ttrigger: always_on
 alwaysApply: true
 `;
+    }
+
+    private generateProjectOverview(workspacePath: string, localDir: string) {
+        const overviewPath = path.join(localDir, 'project-overview.md');
+        if (fs.existsSync(overviewPath)) {
+            return; // 已存在则跳过
+        }
+
+        try {
+            const projectName = path.basename(workspacePath);
+            const lines: string[] = [];
+            lines.push(`# ${projectName} 项目概述`);
+            lines.push('');
+            lines.push(`> 由 WindsurfChatOpen 自动生成于 ${new Date().toISOString()}`);
+            lines.push('');
+
+            // package.json
+            const pkgPath = path.join(workspacePath, 'package.json');
+            if (fs.existsSync(pkgPath)) {
+                try {
+                    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+                    if (pkg.description) {
+                        lines.push(`## 项目描述`);
+                        lines.push('');
+                        lines.push(pkg.description);
+                        lines.push('');
+                    }
+                    lines.push(`## 技术栈`);
+                    lines.push('');
+                    const deps = Object.keys(pkg.dependencies || {});
+                    const devDeps = Object.keys(pkg.devDependencies || {});
+                    if (deps.length > 0) {
+                        lines.push(`### 依赖`);
+                        lines.push('');
+                        deps.forEach(d => lines.push(`- ${d}`));
+                        lines.push('');
+                    }
+                    if (devDeps.length > 0) {
+                        lines.push(`### 开发依赖`);
+                        lines.push('');
+                        devDeps.forEach(d => lines.push(`- ${d}`));
+                        lines.push('');
+                    }
+                } catch { /* ignore */ }
+            }
+
+            // requirements.txt
+            const reqPath = path.join(workspacePath, 'requirements.txt');
+            if (fs.existsSync(reqPath)) {
+                try {
+                    const content = fs.readFileSync(reqPath, 'utf-8').split('\n').filter(l => l.trim() && !l.startsWith('#'));
+                    if (content.length > 0) {
+                        lines.push(`## Python 依赖`);
+                        lines.push('');
+                        content.forEach(d => lines.push(`- ${d.trim()}`));
+                        lines.push('');
+                    }
+                } catch { /* ignore */ }
+            }
+
+            // 顶层目录结构
+            try {
+                const entries = fs.readdirSync(workspacePath, { withFileTypes: true })
+                    .filter(e => !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== '__pycache__' && e.name !== 'dist' && e.name !== 'build')
+                    .slice(0, 30);
+                if (entries.length > 0) {
+                    lines.push(`## 目录结构`);
+                    lines.push('');
+                    lines.push('```');
+                    entries.forEach(e => {
+                        lines.push(e.isDirectory() ? `${e.name}/` : e.name);
+                    });
+                    lines.push('```');
+                    lines.push('');
+                }
+            } catch { /* ignore */ }
+
+            fs.writeFileSync(overviewPath, lines.join('\n'), 'utf-8');
+            console.log(`[WindsurfChatOpen] Generated project overview: ${overviewPath}`);
+        } catch (e) {
+            console.error(`[WindsurfChatOpen] Failed to generate project overview: ${e}`);
+        }
     }
 }

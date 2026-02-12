@@ -123,6 +123,14 @@ export function getPanelHtml(version: string = '0.0.0'): string {
   
   <div class="toast-container" id="toastContainer"></div>
 
+  <div class="project-select-overlay" id="projectSelectOverlay">
+    <div class="project-select-dialog">
+      <div class="project-select-title">选择目标项目</div>
+      <div class="project-select-list" id="projectSelectList"></div>
+      <button class="project-select-cancel" id="projectSelectCancel">取消</button>
+    </div>
+  </div>
+
   <div class="modal" id="imageModal">
     <button class="modal-close" id="modalClose">×</button>
     <img id="modalImage" src="" alt="preview">
