@@ -26,16 +26,17 @@ export interface UserResponse {
 }
 
 interface WebviewMessage {
-  type: 'ready' | 'continue' | 'end' | 'submit' | 'setTimeout' | 'getWorkspaceRoot' | 'saveDevRequirements' | 'saveChatCount' | 'sendNotification' | 'saveLlmConfig' | 'optimizePrompt';
+  type: 'ready' | 'continue' | 'end' | 'submit' | 'setTimeout' | 'getWorkspaceRoot' | 'saveDevRequirements' | 'saveChatCount' | 'sendNotification' | 'saveLlmConfig' | 'optimizePrompt' | 'switchProject' | 'refreshDevRequirements';
   text?: string;
   images?: string[];
   files?: Array<{ name: string; path: string; size: number }>;
   requestId?: string;
   timeoutMinutes?: number;
-  requirements?: Array<{ id: number; text: string; checked: boolean }>;
+  requirements?: Array<{ id: number; text: string; checked: boolean; isGlobal?: boolean }>;
   count?: number;
   llmConfig?: { baseUrl: string; apiKey: string; model: string };
   projectIndices?: number[];
+  projectPath?: string;
 }
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
@@ -57,6 +58,36 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   ) {
     this._context = context;
     this._resetViewReadyPromise();
+    this._migrateOldData();
+  }
+
+  private _migrateOldData() {
+    if (!this._context) { return; }
+    const gs = this._context.globalState;
+    // 迁移旧的全局 devRequirements → devRequirements:global
+    const oldReqs = gs.get<any[]>('devRequirements');
+    if (oldReqs && Array.isArray(oldReqs) && oldReqs.length > 0) {
+      const existing = gs.get<any[]>('devRequirements:global', []) || [];
+      if (existing.length === 0) {
+        gs.update('devRequirements:global', oldReqs);
+        console.log(`[WindsurfChatOpen] Migrated ${oldReqs.length} old devRequirements to global`);
+      }
+      gs.update('devRequirements', undefined); // 清除旧 key
+    }
+    // 迁移旧的全局 chatCount → 第一个工作区文件夹
+    const oldCount = gs.get<number>('chatCount');
+    if (typeof oldCount === 'number' && oldCount > 0) {
+      const folders = vscode.workspace.workspaceFolders;
+      if (folders && folders.length > 0) {
+        const key = `chatCount:${folders[0].uri.fsPath}`;
+        const existing = gs.get<number>(key, 0) || 0;
+        if (existing === 0) {
+          gs.update(key, oldCount);
+          console.log(`[WindsurfChatOpen] Migrated chatCount ${oldCount} to ${key}`);
+        }
+      }
+      gs.update('chatCount', undefined); // 清除旧 key
+    }
   }
 
   private _resetViewReadyPromise() {
@@ -90,27 +121,24 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private _handleWebviewMessage(message: WebviewMessage) {
     const requestId = message.requestId || this._currentRequestId;
     switch (message.type) {
-      case 'ready':
+      case 'ready': {
         this._isWebviewReady = true;
         this._viewReadyResolve?.();
         // 发送当前超时配置到前端
         this._view?.webview.postMessage({ type: 'setTimeoutMinutes', timeoutMinutes: this._timeoutMinutes });
-        // 发送工作区根目录到前端
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (workspaceFolders && workspaceFolders.length > 0) {
-          const workspaceRoot = workspaceFolders[0].uri.fsPath;
-          this._view?.webview.postMessage({ type: 'setWorkspaceRoot', workspaceRoot });
+        // 发送工作区文件夹列表到前端
+        const wsFolders = vscode.workspace.workspaceFolders;
+        if (wsFolders && wsFolders.length > 0) {
+          const projects = wsFolders.map(f => ({ path: f.uri.fsPath, name: path.basename(f.uri.fsPath) }));
+          this._view?.webview.postMessage({ type: 'setWorkspaceRoot', workspaceRoot: wsFolders[0].uri.fsPath, projects });
+          // 发送默认项目（第一个）的数据
+          this._sendProjectData(wsFolders[0].uri.fsPath);
         }
-        // 发送开发要求配置到前端
-        const devRequirements = this._context?.globalState.get('devRequirements', []);
-        this._view?.webview.postMessage({ type: 'setDevRequirements', requirements: devRequirements });
-        // 发送对话次数到前端
-        const chatCount = this._context?.globalState.get('chatCount', 0);
-        this._view?.webview.postMessage({ type: 'setChatCount', count: chatCount });
         // 发送 LLM 配置到前端
         const llmConfig = this._context?.globalState.get('llmConfig', {});
         this._view?.webview.postMessage({ type: 'setLlmConfig', llmConfig });
         break;
+      }
       case 'continue':
         this._onUserResponse.fire({ action: 'continue', text: '', images: [], requestId });
         break;
@@ -135,15 +163,32 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
         break;
       case 'saveDevRequirements':
-        // 保存开发要求配置
-        if (message.requirements && this._context) {
-          this._context.globalState.update('devRequirements', message.requirements);
-          console.log('[WindsurfChatOpen] Dev requirements saved:', message.requirements.length);
+        // 按项目路径保存开发要求
+        if (message.requirements && this._context && message.projectPath) {
+          // 分离全局和项目级要求
+          const globalReqs = message.requirements.filter((r: any) => r.isGlobal);
+          const projectReqs = message.requirements.filter((r: any) => !r.isGlobal);
+          this._context.globalState.update('devRequirements:global', globalReqs);
+          this._context.globalState.update(`devRequirements:${message.projectPath}`, projectReqs);
+          console.log(`[WindsurfChatOpen] Dev requirements saved: global=${globalReqs.length}, project=${projectReqs.length}`);
         }
         break;
       case 'saveChatCount':
-        if (typeof message.count === 'number' && this._context) {
-          this._context.globalState.update('chatCount', message.count);
+        // 按项目路径保存对话次数
+        if (typeof message.count === 'number' && this._context && message.projectPath) {
+          this._context.globalState.update(`chatCount:${message.projectPath}`, message.count);
+        }
+        break;
+      case 'switchProject':
+        // 切换项目时只刷新开发要求（计数基于工作区，不跟随切换）
+        if (message.projectPath) {
+          this._sendProjectDevRequirements(message.projectPath);
+        }
+        break;
+      case 'refreshDevRequirements':
+        // 刷新开发要求（从存储重新加载全局+项目级）
+        if (message.projectPath) {
+          this._sendProjectDevRequirements(message.projectPath);
         }
         break;
       case 'sendNotification':
@@ -172,6 +217,27 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   public getTimeoutMinutes(): number {
     return this._timeoutMinutes;
+  }
+
+  private _sendProjectData(projectPath: string) {
+    if (!this._context) { return; }
+    this._sendProjectDevRequirements(projectPath);
+    // 项目级对话次数
+    const chatCount = this._context.globalState.get<number>(`chatCount:${projectPath}`, 0) || 0;
+    this._view?.webview.postMessage({ type: 'setChatCount', count: chatCount });
+    console.log(`[WindsurfChatOpen] Sent project data for: ${projectPath}, chatCount=${chatCount}`);
+  }
+
+  private _sendProjectDevRequirements(projectPath: string) {
+    if (!this._context) { return; }
+    const globalReqs = this._context.globalState.get<any[]>('devRequirements:global', []) || [];
+    const projectReqs = this._context.globalState.get<any[]>(`devRequirements:${projectPath}`, []) || [];
+    const allReqs = [
+      ...globalReqs.map((r: any) => ({ ...r, isGlobal: true })),
+      ...projectReqs.map((r: any) => ({ ...r, isGlobal: false }))
+    ];
+    this._view?.webview.postMessage({ type: 'setDevRequirements', requirements: allReqs });
+    console.log(`[WindsurfChatOpen] Refreshed dev requirements for: ${projectPath}, total=${allReqs.length}`);
   }
 
   async showPrompt(prompt: string, requestId?: string) {

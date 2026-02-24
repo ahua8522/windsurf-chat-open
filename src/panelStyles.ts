@@ -204,6 +204,18 @@ export function getPanelStyles(): string {
       outline: none;
       border-color: var(--vscode-focusBorder);
     }
+    .config-input-group select {
+      padding: 4px 8px;
+      border: 1px solid var(--vscode-input-border, rgba(128,128,128,0.35));
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .config-input-group select:focus {
+      outline: none;
+      border-color: var(--vscode-focusBorder);
+    }
     .config-unit {
       font-size: 11px;
       color: var(--vscode-descriptionForeground);
@@ -761,7 +773,7 @@ export function getPanelStyles(): string {
       gap: 6px;
     }
     .dev-requirements-title {
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--vscode-foreground);
       flex-shrink: 0;
@@ -824,13 +836,11 @@ export function getPanelStyles(): string {
       transform: rotate(-90deg);
     }
     .dev-requirements-content {
-      max-height: 160px;
       padding: 6px 8px;
       display: flex;
       flex-direction: column;
       gap: 4px;
-      overflow-y: auto;
-      transition: max-height 0.25s ease, padding 0.25s ease;
+      transition: padding 0.25s ease;
       border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.12));
     }
     .dev-requirements-content.collapsed {
@@ -872,6 +882,30 @@ export function getPanelStyles(): string {
       color: var(--vscode-foreground);
       user-select: none;
       line-height: 1.4;
+      font-size: 12px;
+    }
+    .dev-req-item .dev-req-global {
+      background: transparent;
+      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.3));
+      color: var(--vscode-descriptionForeground);
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      cursor: pointer;
+      margin-left: auto;
+      margin-right: 4px;
+      flex-shrink: 0;
+      opacity: 0.5;
+      transition: all 0.15s;
+    }
+    .dev-req-item .dev-req-global:hover {
+      opacity: 0.8;
+    }
+    .dev-req-item .dev-req-global.active {
+      opacity: 1;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border-color: var(--vscode-button-background);
     }
     .dev-req-item .dev-req-delete {
       background: transparent;

@@ -18,6 +18,7 @@ export function getPanelScript(): string {
     const devReqList = document.getElementById('devReqList');
     const devReqInput = document.getElementById('devReqInput');
     const devReqAddBtn = document.getElementById('devReqAddBtn');
+    const devReqRefreshBtn = document.getElementById('devReqRefreshBtn');
     const queueSection = document.getElementById('queueSection');
     const queueList = document.getElementById('queueList');
     const queueCount = document.getElementById('queueCount');
@@ -29,10 +30,13 @@ export function getPanelScript(): string {
     const llmBaseUrlInput = document.getElementById('llmBaseUrl');
     const llmApiKeyInput = document.getElementById('llmApiKey');
     const llmModelInput = document.getElementById('llmModel');
+    const projectSwitcher = document.getElementById('projectSwitcher');
+    const projectSwitcherRow = document.getElementById('projectSwitcherRow');
     let images = [];
     let currentRequestId = '';
     let currentPort = 0;
     let workspaceRoot = ''; // 工作区根目录
+    let currentProjectPath = ''; // 当前活跃项目路径
 
     const MAX_IMAGE_COUNT = 10;
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -40,7 +44,7 @@ export function getPanelScript(): string {
     let fileChipIdCounter = 0; // 用于生成唯一的 file-chip ID
     let isOptimizing = false; // 是否正在优化提示词
     
-    let devRequirements = []; // 开发要求列表 {id, text, checked}
+    let devRequirements = []; // 开发要求列表 {id, text, checked, isGlobal}
     let messageQueue = []; // 消息队列
     let isWaitingForInput = false; // 是否在等待用户输入
     let chatCount = 0; // 对话次数
@@ -465,13 +469,13 @@ export function getPanelScript(): string {
     function incrementChatCount() {
       chatCount++;
       chatCountEl.textContent = chatCount;
-      vscode.postMessage({ type: 'saveChatCount', count: chatCount });
+      vscode.postMessage({ type: 'saveChatCount', count: chatCount, projectPath: workspaceRoot });
     }
 
     chatCountResetBtn.addEventListener('click', () => {
       chatCount = 0;
       chatCountEl.textContent = '0';
-      vscode.postMessage({ type: 'saveChatCount', count: 0 });
+      vscode.postMessage({ type: 'saveChatCount', count: 0, projectPath: workspaceRoot });
     });
 
     inputText.addEventListener('keydown', (e) => {
@@ -769,13 +773,19 @@ export function getPanelScript(): string {
       devReqToggle.classList.toggle('collapsed');
       devReqContent.classList.toggle('collapsed');
     });
+
+    // 刷新开发要求（从后端重新加载全局+项目级）
+    devReqRefreshBtn.addEventListener('click', () => {
+      vscode.postMessage({ type: 'refreshDevRequirements', projectPath: currentProjectPath });
+      showToast('已刷新开发要求');
+    });
     
     // 添加开发要求
-    function addDevRequirement(text, checked = false) {
+    function addDevRequirement(text, checked = false, isGlobal = false) {
       if (!text || !text.trim()) return;
       
       const id = Date.now() + Math.random();
-      const requirement = { id, text: text.trim(), checked };
+      const requirement = { id, text: text.trim(), checked, isGlobal };
       devRequirements.push(requirement);
       
       renderDevRequirement(requirement);
@@ -801,6 +811,18 @@ export function getPanelScript(): string {
       label.htmlFor = 'req-' + req.id;
       label.textContent = req.text;
       
+      // 全局标记按钮
+      const globalBtn = document.createElement('button');
+      globalBtn.className = 'dev-req-global' + (req.isGlobal ? ' active' : '');
+      globalBtn.textContent = '全局';
+      globalBtn.title = req.isGlobal ? '当前为全局要求，点击改为项目级' : '当前为项目级要求，点击改为全局';
+      globalBtn.addEventListener('click', () => {
+        req.isGlobal = !req.isGlobal;
+        globalBtn.className = 'dev-req-global' + (req.isGlobal ? ' active' : '');
+        globalBtn.title = req.isGlobal ? '当前为全局要求，点击改为项目级' : '当前为项目级要求，点击改为全局';
+        saveDevRequirements();
+      });
+
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'dev-req-delete';
       deleteBtn.textContent = '×';
@@ -812,6 +834,7 @@ export function getPanelScript(): string {
       
       item.appendChild(checkbox);
       item.appendChild(label);
+      item.appendChild(globalBtn);
       item.appendChild(deleteBtn);
       devReqList.appendChild(item);
     }
@@ -826,7 +849,8 @@ export function getPanelScript(): string {
     function saveDevRequirements() {
       vscode.postMessage({
         type: 'saveDevRequirements',
-        requirements: devRequirements
+        requirements: devRequirements,
+        projectPath: currentProjectPath
       });
     }
 
@@ -903,10 +927,29 @@ export function getPanelScript(): string {
           updateCountdownForNewTimeout();
         }
       } else if (msg.type === 'setWorkspaceRoot') {
-        // 接收工作区根目录
+        // 接收工作区根目录和项目列表
         if (msg.workspaceRoot) {
           workspaceRoot = msg.workspaceRoot;
+          currentProjectPath = msg.workspaceRoot;
           console.log('[WindsurfChatOpen] Workspace root set to:', workspaceRoot);
+        }
+        // 初始化项目切换器
+        if (msg.projects && msg.projects.length > 1) {
+          projectSwitcherRow.style.display = '';
+          projectSwitcher.innerHTML = '';
+          msg.projects.forEach(function(p) {
+            var opt = document.createElement('option');
+            opt.value = p.path;
+            opt.textContent = p.name;
+            projectSwitcher.appendChild(opt);
+          });
+          projectSwitcher.value = currentProjectPath;
+          projectSwitcher.onchange = function() {
+            currentProjectPath = projectSwitcher.value;
+            vscode.postMessage({ type: 'switchProject', projectPath: currentProjectPath });
+          };
+        } else {
+          projectSwitcherRow.style.display = 'none';
         }
       } else if (msg.type === 'setDevRequirements') {
         // 接收开发要求配置

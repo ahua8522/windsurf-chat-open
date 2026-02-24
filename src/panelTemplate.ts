@@ -39,6 +39,12 @@ export function getPanelHtml(version: string = '0.0.0'): string {
   </div>
 
   <div class="config-bar" id="configBar">
+    <div class="config-bar-row" id="projectSwitcherRow" style="display:none;">
+      <label for="projectSwitcher">当前项目</label>
+      <div class="config-input-group">
+        <select id="projectSwitcher" style="width:100%;"></select>
+      </div>
+    </div>
     <div class="config-bar-row">
       <label for="timeoutInput">超时时间</label>
       <div class="config-input-group">
@@ -110,6 +116,7 @@ export function getPanelHtml(version: string = '0.0.0'): string {
         <div class="dev-requirements-header-actions">
           <input type="text" id="devReqInput" placeholder="添加..." maxlength="100" />
           <button id="devReqAddBtn" title="添加">+</button>
+          <button id="devReqRefreshBtn" title="刷新（同步全局要求）">↻</button>
           <button class="dev-requirements-toggle" id="devReqToggle" title="展开/收起">▼</button>
         </div>
       </div>
